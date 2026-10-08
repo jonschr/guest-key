@@ -45,7 +45,7 @@
 
 	function setBusy(value) {
 		busy = value;
-		document.querySelectorAll('[data-guest-key-create], [data-guest-key-revoke]').forEach(button => { button.disabled = value; });
+		document.querySelectorAll('[data-guest-key-create], [data-guest-key-revoke]').forEach(button => { button.disabled = value || button.hasAttribute('data-guest-key-unavailable'); });
 		const toolbar = document.querySelector('#wp-admin-bar-guest-key-access > .ab-item');
 		if (toolbar) toolbar.setAttribute('aria-busy', String(value));
 	}
@@ -103,7 +103,7 @@
 
 	function inspectAbility(event) {
 		const button = event.currentTarget;
-		const template = button.closest('[data-guest-key-ability]').querySelector('[data-guest-key-ability-content]');
+		const template = button.closest('[data-guest-key-item]').querySelector('[data-guest-key-ability-content]');
 		closeDialog();
 		returnFocus = button;
 		dialog = document.createElement('dialog');
@@ -152,9 +152,12 @@
 			setBusy(false);
 			const grantStatus = document.getElementById('guest-key-grant-status');
 			if (grantStatus) grantStatus.textContent = `${s.created} ${s.expires}${data.expires_label}`;
+			document.querySelectorAll('[data-guest-key-revoke]').forEach(button => { button.hidden = false; });
 			const adapterStatus = document.getElementById('guest-key-adapter-status');
-			if (adapterStatus) adapterStatus.textContent = s.active;
-			status(`${copied ? s.copied : s.created} ${s.expires}${data.expires_label}`, false, true);
+			if (adapterStatus) adapterStatus.textContent = data.mcp.ready ? s.active : s.mcpUnavailable;
+			const endpoint = document.getElementById('guest-key-mcp-endpoint');
+			if (endpoint) endpoint.hidden = !data.mcp.ready;
+			status(`${copied ? s.copied : s.created} ${s.expires}${data.expires_label}${data.mcp.ready ? '' : ` ${s.mcpUnavailable}`}`, false, true);
 			if (!copied) fallback(data.bundle, data.expires_label);
 		} catch (error) {
 			setBusy(false);
@@ -171,8 +174,11 @@
 			closeDialog();
 			const grantStatus = document.getElementById('guest-key-grant-status');
 			if (grantStatus) grantStatus.textContent = s.revoked;
+			document.querySelectorAll('[data-guest-key-revoke]').forEach(button => { button.hidden = true; });
 			const adapterStatus = document.getElementById('guest-key-adapter-status');
 			if (adapterStatus) adapterStatus.textContent = data.adapter_active ? s.active : s.inactive;
+			const endpoint = document.getElementById('guest-key-mcp-endpoint');
+			if (endpoint) endpoint.hidden = !data.adapter_active;
 			setBusy(false);
 			status(s.revoked);
 		} catch (error) {
@@ -186,13 +192,22 @@
 	document.querySelectorAll('[data-guest-key-create]').forEach(button => button.addEventListener('click', createAccess));
 	document.querySelectorAll('[data-guest-key-revoke]').forEach(button => button.addEventListener('click', revokeAccess));
 	document.querySelectorAll('[data-guest-key-inspect]').forEach(button => button.addEventListener('click', inspectAbility));
+	function openInventory() {
+		const inventory = document.getElementById('guest-key-inventory');
+		if (inventory && location.hash === '#guest-key-inventory') inventory.open = true;
+	}
+	openInventory();
+	window.addEventListener('hashchange', openInventory);
 	document.getElementById('guest-key-search')?.addEventListener('input', event => {
 		const query = event.target.value.toLocaleLowerCase().trim();
 		let visible = 0;
-		document.querySelectorAll('[data-guest-key-ability]').forEach(row => {
+		document.querySelectorAll('[data-guest-key-item]').forEach(row => {
 			const details = row.querySelector('[data-guest-key-ability-content]');
 			row.hidden = !(row.textContent + (details?.content.textContent || '')).toLocaleLowerCase().includes(query);
 			if (!row.hidden) visible++;
+		});
+		document.querySelectorAll('[data-guest-key-section]').forEach(section => {
+			section.hidden = !!query && !section.querySelector('[data-guest-key-item]:not([hidden])');
 		});
 		document.getElementById('guest-key-empty').hidden = visible !== 0;
 		document.getElementById('guest-key-search-count').textContent = `${visible} shown`;

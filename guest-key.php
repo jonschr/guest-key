@@ -2,8 +2,8 @@
 /**
  * Plugin Name: Guest Key
  * Plugin URI: https://elod.in
- * Description: One-click, six-hour administrator access to WordPress abilities through MCP.
- * Version: 0.1.0
+ * Description: One-click, six-hour administrator access through native WordPress APIs, MCP, and temporary browser sessions.
+ * Version: 0.1.2
  * Author: Jon Schroeder
  * Author URI: https://elod.in
  * Update URI: https://github.com/jonschr/guest-key
@@ -15,7 +15,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'GUEST_KEY_VERSION', '0.1.0' );
+define( 'GUEST_KEY_VERSION', '0.1.2' );
 define( 'GUEST_KEY_FILE', __FILE__ );
 define( 'GUEST_KEY_DIR', __DIR__ );
 
@@ -34,15 +34,23 @@ $guest_key_update_checker = \YahnisElsts\PluginUpdateChecker\v5\PucFactory::buil
 require_once __DIR__ . '/includes/class-guest-key-dependency.php';
 require_once __DIR__ . '/includes/class-guest-key-access.php';
 require_once __DIR__ . '/includes/class-guest-key-browser.php';
+require_once __DIR__ . '/includes/class-guest-key-browser-sessions.php';
 require_once __DIR__ . '/includes/class-guest-key-abilities.php';
+require_once __DIR__ . '/includes/class-guest-key-commands.php';
+require_once __DIR__ . '/includes/class-guest-key-discovery.php';
 require_once __DIR__ . '/includes/class-guest-key-plugin-abilities.php';
 require_once __DIR__ . '/includes/class-guest-key-admin-abilities.php';
+require_once __DIR__ . '/includes/class-guest-key-content-abilities.php';
+require_once __DIR__ . '/includes/class-guest-key-data-abilities.php';
+require_once __DIR__ . '/includes/class-guest-key-files.php';
 require_once __DIR__ . '/includes/class-guest-key-package-abilities.php';
 require_once __DIR__ . '/includes/class-guest-key-admin.php';
 
 Guest_Key_Access::init();
 Guest_Key_Browser::init();
 Guest_Key_Abilities::init();
+Guest_Key_Commands::init();
+Guest_Key_Files::init();
 Guest_Key_Admin::init();
 Guest_Key_Dependency::init();
 

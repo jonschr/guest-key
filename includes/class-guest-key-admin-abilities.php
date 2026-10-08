@@ -66,9 +66,19 @@ final class Guest_Key_Admin_Abilities {
 		if ( ! isset( self::$groups[ $group ] ) || ! self::allowed( $input['path'], self::bases( $group ) ) ) {
 			return new WP_Error( 'guest_key_route_denied', 'This route is outside the ability’s supported admin operations.' );
 		}
-		$request = new WP_REST_Request( $input['method'] ?? 'GET', $input['path'] );
-		$request->set_body_params( (array) ( $input['parameters'] ?? array() ) );
-		return self::response( rest_do_request( $request ) );
+		return self::dispatch( $input['method'] ?? 'GET', $input['path'], (array) ( $input['parameters'] ?? array() ) );
+	}
+
+	public static function dispatch( $method, $path, $parameters ) {
+		$request = new WP_REST_Request( $method, $path );
+		if ( in_array( $method, array( 'GET', 'HEAD', 'OPTIONS' ), true ) ) { $request->set_query_params( $parameters ); }
+		else { $request->set_body_params( $parameters ); }
+		return self::response( self::dispatch_request( $request ) );
+	}
+
+	private static function dispatch_request( $request ) {
+		// Internal dispatch skips the response stage used by HTTP and core batch requests.
+		return apply_filters( 'rest_post_dispatch', rest_do_request( $request ), rest_get_server(), $request );
 	}
 
 	private static function response( $response ) {
@@ -81,6 +91,14 @@ final class Guest_Key_Admin_Abilities {
 			if ( 'x-wp-totalpages' === strtolower( $name ) ) { $result['total_pages'] = (int) $value; }
 		}
 		return $result;
+	}
+
+	public static function request( $input ) {
+		$path = $input['path'];
+		if ( preg_match( '~[\\\\%?#\x00-\x20]|(?:^|/)\.{1,2}(?:/|$)~', $path ) || preg_match( '#/application-passwords(?:/|$)#', $path ) || 0 === strpos( $path, '/guest-key/v1/' ) ) {
+			return new WP_Error( 'guest_key_route_denied', 'Use a native REST path without query text, credentials, or Guest Key transport routes.' );
+		}
+		return self::dispatch( $input['method'] ?? 'GET', $path, (array) ( $input['parameters'] ?? array() ) );
 	}
 
 	public static function discover( $input ) {
@@ -134,6 +152,6 @@ final class Guest_Key_Admin_Abilities {
 		$request->set_header( 'content-disposition', 'attachment; filename="' . $filename . '"' );
 		$request->set_body( $bytes );
 		$request->set_body_params( (array) ( $input['fields'] ?? array() ) );
-		return self::response( rest_do_request( $request ) );
+		return self::response( self::dispatch_request( $request ) );
 	}
 }

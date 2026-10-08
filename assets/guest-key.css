@@ -1,7 +1,10 @@
 .guest-key-page { max-width: 1200px; }
 .guest-key-intro { font-size: 15px; }
-.guest-key-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; margin: 24px 0; }
 .guest-key-card { background: #fff; border: 1px solid #c3c4c7; border-radius: 4px; padding: 20px; }
+.guest-key-connect { max-width: 720px; margin: 24px 0; }
+.guest-key-details { border-bottom: 1px solid #c3c4c7; padding: 16px 0; }
+.guest-key-details > summary { cursor: pointer; font-size: 14px; font-weight: 600; }
+.guest-key-details-content { margin-top: 16px; }
 .guest-key-card h2 { margin-top: 0; }
 .guest-key-card .button { margin: 0 6px 8px 0; }
 .guest-key-endpoint { overflow-wrap: anywhere; }
@@ -12,7 +15,10 @@
 .guest-key-table td { vertical-align: top; padding: 16px 12px; }
 .guest-key-table td p { margin-bottom: 0; }
 .guest-key-table code { overflow-wrap: anywhere; }
-.guest-key-table tr[hidden], .guest-key-toast[hidden] { display: none; }
+.guest-key-table tr[hidden], .guest-key-toast[hidden], .guest-key-page [hidden] { display: none; }
+.guest-key-discovery { margin: 28px 0; }
+.guest-key-mobile-status { display: none; }
+.guest-key-discovery td { overflow-wrap: anywhere; }
 .guest-key-toast { position: fixed; z-index: 100100; bottom: 24px; right: 24px; max-width: min(520px, calc(100vw - 48px)); box-sizing: border-box; padding: 16px 20px; background: #1d2327; color: #fff; border-left: 4px solid #00a32a; border-radius: 4px; box-shadow: 0 4px 20px #0003; font: 14px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
 .guest-key-toast.guest-key-error { border-left-color: #d63638; }
 .guest-key-toast button { display: block; margin-top: 10px; padding: 4px 0; background: none; border: none; color: #8ed1fc; cursor: pointer; font: inherit; text-decoration: underline; }
@@ -30,9 +36,14 @@
 .guest-key-ability-dialog pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; max-height: 320px; overflow: auto; background: #f0f0f1; padding: 12px; }
 #wpadminbar #wp-admin-bar-guest-key-access .ab-icon::before { content: '\f105'; top: 2px; }
 @media (max-width: 782px) {
-	.guest-key-cards { grid-template-columns: 1fr; }
+	.guest-key-mobile-status { display: block; }
 	.guest-key-table th:nth-child(3), .guest-key-table td:nth-child(3) { display: none; }
 	.guest-key-table td { padding: 12px 8px; }
+	.guest-key-table { table-layout: fixed; }
+	.guest-key-table th:first-child { width: 50%; }
+	.guest-key-table th:nth-child(2) { width: 22%; }
+	.guest-key-table td { overflow-wrap: anywhere; }
+	.guest-key-table .button { max-width: 100%; white-space: normal; line-height: 1.4; padding: 8px; }
 	#wpadminbar #wp-admin-bar-guest-key-access { display: block; }
 	#wpadminbar #wp-admin-bar-guest-key-access > .ab-item .ab-label { display: none; }
 }

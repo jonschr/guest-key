@@ -5,12 +5,16 @@ final class Guest_Key_Browser {
 
 	const ACTION = 'guest-key';
 	const SESSION = 'guest_key';
+	private static $validated_tokens = array();
 
 	public static function init() {
 		add_action( 'login_form_' . self::ACTION, array( __CLASS__, 'login' ) );
+		add_action( 'auth_cookie_valid', array( __CLASS__, 'capture_cookie' ), 10, 2 );
 		add_filter( 'determine_current_user', array( __CLASS__, 'validate_session' ), 30 );
 		add_action( 'set_current_user', array( __CLASS__, 'authorize_session' ) );
 		add_filter( 'map_meta_cap', array( __CLASS__, 'restrict_capabilities' ), 99, 4 );
+		add_filter( 'attach_session_information', array( __CLASS__, 'inherit_session' ), 90, 2 );
+		add_filter( 'auth_cookie_expiration', array( __CLASS__, 'limit_expiration' ), 99, 2 );
 	}
 
 	public static function url() {
@@ -23,14 +27,21 @@ final class Guest_Key_Browser {
 			&& self::ACTION === ( $_GET['action'] ?? '' );
 	}
 
-	private static function cookie_token() {
+	public static function capture_cookie( $cookie, $user ) {
+		self::$validated_tokens[ $user->ID ] = $cookie['token'];
+	}
+
+	private static function cookie_token( $user_id ) {
+		// Follow the cookie WordPress actually validated. An invalid second cookie
+		// must not hide a guest binding when core falls back to the logged-in cookie.
+		if ( isset( self::$validated_tokens[ $user_id ] ) ) { return self::$validated_tokens[ $user_id ]; }
 		$cookie = wp_parse_auth_cookie();
 		return $cookie['token'] ?? wp_get_session_token();
 	}
 
 	public static function session( $user_id = null ) {
 		$user_id = null === $user_id ? get_current_user_id() : (int) $user_id;
-		$token = self::cookie_token();
+		$token = self::cookie_token( $user_id );
 		return $user_id && $token ? WP_Session_Tokens::get_instance( $user_id )->get( $token ) : null;
 	}
 
@@ -54,7 +65,7 @@ final class Guest_Key_Browser {
 			|| (int) $grant['network_id'] !== get_current_network_id()
 			|| (int) ( $binding['blog_id'] ?? 0 ) !== get_current_blog_id()
 			|| (int) ( $binding['network_id'] ?? 0 ) !== get_current_network_id() ) {
-			WP_Session_Tokens::get_instance( $user_id )->destroy( self::cookie_token() );
+			WP_Session_Tokens::get_instance( $user_id )->destroy( self::cookie_token( $user_id ) );
 			return 0;
 		}
 		return $user_id;
@@ -64,18 +75,37 @@ final class Guest_Key_Browser {
 	public static function authorize_session() {
 		$user_id = get_current_user_id();
 		if ( $user_id && self::is_guest_session() && ! Guest_Key_Access::administrator( $user_id ) ) {
-			WP_Session_Tokens::get_instance( $user_id )->destroy( self::cookie_token() );
+			WP_Session_Tokens::get_instance( $user_id )->destroy( self::cookie_token( $user_id ) );
 			wp_set_current_user( 0 );
 		}
 	}
 
 	public static function restrict_capabilities( $caps, $cap, $user_id, $args ) {
 		// Use the provided user ID; this filter must not resolve the current user.
+		if ( ! in_array( $cap, array( 'edit_files', 'edit_plugins', 'edit_themes', 'create_app_password' ), true ) ) { return $caps; }
+		if ( Guest_Key_Access::is_guest_request( $user_id ) ) { return array( 'do_not_allow' ); }
 		$session = self::session( $user_id );
-		if ( ! empty( $session[ self::SESSION ] ) && in_array( $cap, array( 'edit_files', 'edit_plugins', 'edit_themes', 'create_app_password' ), true ) ) {
+		if ( ! empty( $session[ self::SESSION ] ) ) {
 			return array( 'do_not_allow' );
 		}
 		return $caps;
+	}
+
+	public static function inherit_session( $information, $user_id ) {
+		$session = self::session( $user_id );
+		if ( ! empty( $session[ self::SESSION ] ) ) {
+			$information[ self::SESSION ] = $session[ self::SESSION ];
+		}
+		return $information;
+	}
+
+	public static function limit_expiration( $length, $user_id ) {
+		$session = self::session( $user_id );
+		if ( ! empty( $session[ self::SESSION ] ) ) {
+			$grant = Guest_Key_Access::grant( $user_id );
+			return min( $length, max( 1, ( $grant['expires'] ?? 0 ) - time() ) );
+		}
+		return $length;
 	}
 
 	/** Verify only the dedicated Guest Key credential, then establish authorization. */
@@ -105,6 +135,9 @@ final class Guest_Key_Browser {
 			return new WP_Error( 'guest_key_browser_invalid', __( 'An authenticated Guest Key is required.', 'guest-key' ) );
 		}
 		$manager = WP_Session_Tokens::get_instance( $user_id );
+		if ( 'WP_User_Meta_Session_Tokens' !== get_class( $manager ) ) {
+			return new WP_Error( 'guest_key_browser_storage', __( 'Guest Key browser access requires WordPress’s native session storage. MCP access remains available.', 'guest-key' ) );
+		}
 		$attach = static function ( $session, $id ) use ( $user_id, $grant ) {
 			if ( (int) $id === (int) $user_id ) {
 				$session[ self::SESSION ] = array( 'uuid' => $grant['uuid'], 'blog_id' => $grant['blog_id'], 'network_id' => $grant['network_id'] );

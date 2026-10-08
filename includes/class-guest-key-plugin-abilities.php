@@ -5,10 +5,8 @@ final class Guest_Key_Plugin_Abilities {
 
 	/** Dispatch internally through core so its validation and permission checks still run. */
 	private static function request( $method, $route, $params ) {
-		$request = new WP_REST_Request( $method, $route );
-		$request->set_body_params( $params );
-		$response = rest_do_request( $request );
-		return $response->is_error() ? $response->as_error() : $response->get_data();
+		$response = Guest_Key_Admin_Abilities::dispatch( $method, $route, $params );
+		return is_wp_error( $response ) ? $response : $response['data'];
 	}
 
 	public static function list_plugins( $input ) {

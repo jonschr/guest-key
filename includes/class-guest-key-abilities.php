@@ -28,9 +28,8 @@ final class Guest_Key_Abilities {
 	}
 
 	public static function register_server( $adapter ) {
-		// Explicit registration includes private abilities on this credential-gated endpoint only.
-		// Core and plugin permission callbacks still run for every execution.
-		$tools = array_keys( wp_get_abilities() );
+		// Discover schemas on demand; the command runner still executes native abilities.
+		$tools = array( 'guest-key/help', 'guest-key/run' );
 		$adapter->create_server(
 			'guest-key', 'guest-key/v1', 'mcp', 'Guest Key',
 			'Temporary administrator access to all registered WordPress abilities.',
@@ -46,6 +45,14 @@ final class Guest_Key_Abilities {
 			$property = new ReflectionProperty( $ability, 'execute_callback' );
 			$property->setAccessible( true );
 			$callback = $property->getValue( $ability );
+			return self::callback_location( $callback );
+		} catch ( Throwable $e ) {
+			return array();
+		}
+	}
+
+	private static function callback_location( $callback ) {
+		try {
 			if ( is_array( $callback ) ) {
 				$reflection = new ReflectionMethod( $callback[0], $callback[1] );
 			} elseif ( is_string( $callback ) && false !== strpos( $callback, '::' ) ) {
@@ -61,7 +68,7 @@ final class Guest_Key_Abilities {
 		}
 	}
 
-	private static function identify( $file ) {
+	public static function identify( $file ) {
 		$file = wp_normalize_path( $file );
 		$relative = ltrim( str_replace( wp_normalize_path( ABSPATH ), '', $file ), '/' );
 		require_once ABSPATH . 'wp-admin/includes/plugin.php';

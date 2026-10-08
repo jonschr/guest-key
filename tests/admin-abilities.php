@@ -27,7 +27,7 @@ $assert = static function ( $condition, $message ) use ( &$count ) {
 };
 $http = static function ( $body, $credential, $session = '' ) use ( &$requests ) {
 	$requests++;
-	$headers = array( 'Content-Type' => 'application/json', 'Accept' => 'application/json, text/event-stream', 'Authorization' => 'Basic ' . base64_encode( $credential['username'] . ':' . $credential['password'] ) );
+	$headers = array( 'Content-Type' => 'application/json', 'Accept' => 'application/json, text/event-stream', 'MCP-Protocol-Version' => '2025-11-25', 'Authorization' => 'Basic ' . base64_encode( $credential['username'] . ':' . $credential['password'] ) );
 	if ( $session ) { $headers['Mcp-Session-Id'] = $session; }
 	$response = wp_remote_post( Guest_Key_Access::endpoint(), array( 'headers' => $headers, 'body' => wp_json_encode( $body ), 'sslverify' => false, 'timeout' => 40, 'user-agent' => 'T3Code/0.0.46-nightly.20261005.2689 (user-directed AI agent; agent=Codex; model=gpt-6.1-sol) GuestKey/' . GUEST_KEY_VERSION . ' WordPress/' . get_bloginfo( 'version' ) ) );
 	if ( is_wp_error( $response ) ) { throw new RuntimeException( $response->get_error_message() ); }
@@ -44,17 +44,17 @@ try {
 	$session = $init['session'];
 	$assert( $session && isset( $init['body']['result'] ), 'Temporary administrator connects through MCP' );
 	$call = static function ( $name, $arguments = array() ) use ( $http, $credential, $session ) {
-		$response = $http( array( 'jsonrpc' => '2.0', 'id' => wp_rand(), 'method' => 'tools/call', 'params' => array( 'name' => 'guest-key-' . $name, 'arguments' => $arguments ?: new stdClass() ) ), $credential, $session );
+		$aliases = array( 'install-plugin' => 'plugin install', 'activate-plugin' => 'plugin activate', 'deactivate-plugin' => 'plugin deactivate', 'delete-plugin' => 'plugin delete', 'activate-theme' => 'theme activate', 'delete-theme' => 'theme delete', 'list-updates' => 'update list', 'apply-update' => 'update apply' );
+		$command = isset( $aliases[ $name ] ) ? array( 'command' => $aliases[ $name ], 'input' => $arguments ?: new stdClass() ) : array( 'command' => 'ability run', 'input' => array( 'name' => 'guest-key/' . $name, 'input' => $arguments ?: new stdClass() ) );
+		$response = $http( array( 'jsonrpc' => '2.0', 'id' => wp_rand(), 'method' => 'tools/call', 'params' => array( 'name' => 'guest-key-run', 'arguments' => array( 'commands' => array( $command ) ) ) ), $credential, $session );
 		$body = $response['body'];
 		if ( ! empty( $body['error'] ) || ! empty( $body['result']['isError'] ) ) { return new WP_Error( 'mcp_failure', wp_json_encode( $body ) ); }
-		return $body['result']['structuredContent'] ?? json_decode( $body['result']['content'][0]['text'] ?? 'null', true );
+		$batch = $body['result']['structuredContent'] ?? json_decode( $body['result']['content'][0]['text'] ?? 'null', true );
+		return empty( $batch['ok'] ) ? new WP_Error( 'command_failure', wp_json_encode( $batch ) ) : $batch['results'][0]['data'];
 	};
 	$tool_response = $http( array( 'jsonrpc' => '2.0', 'id' => 2, 'method' => 'tools/list', 'params' => new stdClass() ), $credential, $session );
 	$names = array_column( $tool_response['body']['result']['tools'] ?? array(), 'name' );
-	foreach ( glob( GUEST_KEY_DIR . '/abilities/*.php' ) as $file ) {
-		$name = basename( $file, '.php' );
-		$assert( in_array( 'guest-key-' . $name, $names, true ), 'MCP discovers ' . $name );
-	}
+	$assert( array( 'guest-key-help', 'guest-key-run' ) === $names, 'MCP discovers only command help and execution' );
 	foreach ( Guest_Key_Abilities::inventory() as $row ) {
 		if ( 0 === strpos( $row['name'], 'guest-key/' ) ) { $assert( 'Guest Key' === $row['source']['name'] && false !== strpos( $row['source']['file'], '/abilities/' ), 'Backend attributes ' . $row['name'] . ' to its individual file' ); }
 	}
@@ -65,13 +65,15 @@ try {
 	$posts[] = $post['data']['id'];
 	$changed = $call( 'manage-content', array( 'method' => 'POST', 'path' => '/wp/v2/posts/' . $posts[0], 'parameters' => array( 'title' => 'Guest Key edited test draft' ) ) );
 	$assert( ! is_wp_error( $changed ) && 'Guest Key edited test draft' === get_post( $posts[0] )->post_title, 'Update draft content through MCP' );
+	$read = $call( 'manage-content', array( 'path' => '/wp/v2/posts/' . $posts[0], 'parameters' => array( 'context' => 'edit', '_fields' => 'id,title.raw' ) ) );
+	$assert( ! is_wp_error( $read ) && array( 'id' => $posts[0], 'title' => array( 'raw' => 'Guest Key edited test draft' ) ) === $read['data'], 'GET edit context and nested field selection work through MCP' );
 	$invalid = $call( 'manage-content', array( 'method' => 'POST', 'path' => '/wp/v2/posts/' . $posts[0], 'parameters' => array( 'status' => 'not-a-status' ) ) );
 	$assert( is_wp_error( $invalid ), 'Native input validation rejects an invalid post status' );
 	$custom = $call( 'manage-content', array( 'method' => 'POST', 'path' => '/wp/v2/guest-key-test-content', 'parameters' => array( 'title' => 'Guest Key custom post test', 'status' => 'draft' ) ) );
 	$assert( ! is_wp_error( $custom ) && 201 === $custom['status'], 'REST-enabled custom post types are supported' );
 	$posts[] = $custom['data']['id'];
 	$list = $call( 'manage-content', array( 'path' => '/wp/v2/posts', 'parameters' => array( 'status' => 'draft', 'per_page' => 1 ) ) );
-	$assert( ! is_wp_error( $list ) && isset( $list['total'], $list['total_pages'] ), 'Pagination totals survive the MCP response' );
+	$assert( ! is_wp_error( $list ) && isset( $list['total'], $list['total_pages'] ) && 1 === count( $list['data'] ) && 'draft' === $list['data'][0]['status'], 'GET pagination and status filtering work while totals survive the MCP response' );
 	$term = $call( 'manage-taxonomies', array( 'method' => 'POST', 'path' => '/wp/v2/categories', 'parameters' => array( 'name' => 'Guest Key test ' . wp_generate_password( 8, false ) ) ) );
 	$assert( ! is_wp_error( $term ) && 201 === $term['status'], 'Create a taxonomy term through MCP' );
 	$terms[] = $term['data']['id'];
@@ -101,8 +103,10 @@ try {
 	$activated = $call( 'activate-plugin', array( 'plugin' => 'guest-key-admin-test/guest-key-admin-test.php' ) );
 	wp_cache_delete( 'alloptions', 'options' );
 	$assert( ! is_wp_error( $activated ) && is_plugin_active( 'guest-key-admin-test/guest-key-admin-test.php' ), 'Activate an installed plugin through MCP' );
-	$next = $http( array( 'jsonrpc' => '2.0', 'id' => 3, 'method' => 'tools/list', 'params' => new stdClass() ), $credential, $session );
-	$assert( in_array( 'guest-key-test-installed', array_column( $next['body']['result']['tools'], 'name' ), true ), 'Newly activated plugin abilities appear on the next MCP request' );
+	$command = array( 'command' => 'ability list', 'input' => array( 'search' => 'guest-key-test/installed' ) );
+	$next = $http( array( 'jsonrpc' => '2.0', 'id' => 3, 'method' => 'tools/call', 'params' => array( 'name' => 'guest-key-run', 'arguments' => array( 'commands' => array( $command ) ) ) ), $credential, $session );
+	$items = $next['body']['result']['structuredContent']['results'][0]['data']['items'] ?? array();
+	$assert( in_array( 'guest-key-test/installed', array_column( $items, 'name' ), true ), 'Newly activated plugin abilities are discoverable on the next MCP request' );
 	$assert( is_wp_error( $call( 'delete-plugin', array( 'plugin' => 'guest-key-admin-test/guest-key-admin-test' ) ) ), 'Active plugin deletion is rejected' );
 	$deactivated = $call( 'deactivate-plugin', array( 'plugin' => 'guest-key-admin-test/guest-key-admin-test' ) );
 	wp_cache_delete( 'alloptions', 'options' );

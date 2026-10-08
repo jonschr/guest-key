@@ -8,9 +8,14 @@ final class Guest_Key_Access {
 	const TTL = 6 * HOUR_IN_SECONDS;
 	const ROUTE = '/guest-key/v1/mcp';
 	const CRON = 'guest_key_expire';
+	private static $authenticated_user_id = 0;
 
 	public static function init() {
 		add_action( 'wp_authenticate_application_password_errors', array( __CLASS__, 'authenticate' ), 10, 3 );
+		add_action( 'application_password_did_authenticate', array( __CLASS__, 'authenticated' ), 10, 2 );
+		add_action( 'application_password_failed_authentication', array( __CLASS__, 'authentication_failed' ) );
+		add_action( 'set_current_user', array( __CLASS__, 'authorize_authenticated_user' ) );
+		add_filter( 'rest_authentication_errors', array( __CLASS__, 'authorize_rest' ), 85 );
 		add_action( self::CRON, array( __CLASS__, 'expire' ), 10, 2 );
 		add_action( 'wp_ajax_guest_key_create', array( __CLASS__, 'ajax_create' ) );
 		add_action( 'wp_ajax_guest_key_revoke', array( __CLASS__, 'ajax_revoke' ) );
@@ -92,10 +97,6 @@ final class Guest_Key_Access {
 			return new WP_Error( 'guest_key_passwords_disabled', __( 'Application passwords are unavailable. Use HTTPS and check your site’s application-password policy.', 'guest-key' ) );
 		}
 		return self::locked( $user_id, static function () use ( $user_id ) {
-			$ready = Guest_Key_Dependency::ensure();
-			if ( is_wp_error( $ready ) ) {
-				return $ready;
-			}
 			// Revoke all passwords with our app identifier, including any orphan from an interrupted request.
 			$old = self::grant( $user_id );
 			$revoked = self::remove_passwords( $user_id );
@@ -108,7 +109,7 @@ final class Guest_Key_Access {
 			delete_user_meta( $user_id, self::META );
 			$created = WP_Application_Passwords::create_new_application_password( $user_id, array(
 				'app_id' => self::APP_ID,
-				'name' => 'Guest Key — temporary MCP access',
+				'name' => 'Guest Key — temporary administrator access',
 			) );
 			if ( is_wp_error( $created ) ) {
 				return $created;
@@ -132,15 +133,34 @@ final class Guest_Key_Access {
 				restore_current_blog();
 			}
 			$expires = gmdate( 'c', $grant['expires'] );
-			$user_agent = '<client>/<version> (user-directed AI agent; agent=<agent>; model=<model>) GuestKey/' . GUEST_KEY_VERSION . ' WordPress/' . get_bloginfo( 'version' );
+			try { $ready = Guest_Key_Dependency::ensure(); }
+			catch ( Throwable $error ) { $ready = new WP_Error( 'guest_key_adapter_setup', $error->getMessage() ); }
+			$mcp = array( 'ready' => ! is_wp_error( $ready ) );
+			if ( is_wp_error( $ready ) ) {
+				$mcp['error'] = array( 'code' => $ready->get_error_code(), 'message' => $ready->get_error_message() );
+				update_option( 'guest_key_dependency_error', $ready->get_error_message(), false );
+			}
+			$user_agent = 'GuestKey/' . GUEST_KEY_VERSION . ' (+https://elod.in/guest-key-wordpress-mcp)';
 			return array(
-				'endpoint' => self::endpoint(),
+				'endpoint' => $mcp['ready'] ? self::endpoint() : null,
+				'mcp' => $mcp,
+				'rest_api' => rest_url(),
 				'browser_login' => Guest_Key_Browser::url(),
+				'commands' => rest_url( 'guest-key/v1/run' ),
 				'username' => $user->user_login,
 				'password' => $password,
 				'expires' => $expires,
 				'expires_label' => wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ) . ' T', $grant['expires'] ),
-				'bundle' => "Connect to this WordPress site using MCP (Streamable HTTP).\nEndpoint: " . self::endpoint() . "\nAuthentication: HTTP Basic\nUsername: " . $user->user_login . "\nApplication password: " . $password . "\nExpires: " . $expires . "\nUser-Agent: " . $user_agent . "\nFor programmatic HTTP/MCP requests, set this actual User-Agent header. Replace the placeholders with your client name/version, agent name, and model; omit unknown fields rather than inventing them. Retain the phrase user-directed AI agent and reuse the same identifier for retries and diagnostics. Keep interactive browser user agents unchanged. If your MCP client cannot set headers, report that limitation instead of claiming the header was sent.\nBrowser sign-in: " . Guest_Key_Browser::url() . "\nFor browser skills, open that sign-in page and enter the same username and application password in its form. The resulting browser session works on the site backend and frontend and ends when this key expires, is revoked, or is replaced. Do not put the password in a URL. Direct file editing and issuing replacement Guest Keys or application passwords are disabled in these sessions.\nThis credential works on the Guest Key MCP endpoint and its browser sign-in page. Use this administrator’s existing permissions.",
+				'bundle' => implode( "\n", array(
+					'WordPress REST API (HTTP Basic): ' . rest_url(),
+					'Commands: GET ' . rest_url( 'guest-key/v1/help' ) . ' for names/schema (?command=post%20save); POST ' . rest_url( 'guest-key/v1/run' ) . ' with {"commands":[{"command":"plugin install","input":{"slug":"example","activate":true}}]}. Batches stop on failure; check ok/results/error before retrying. Use file list/read/search to inspect wp-content source. Before design work, run design guide for the workflow and topic index.',
+					'Username: ' . $user->user_login,
+					'Application password: ' . $password,
+					'Expires: ' . $expires,
+					'User-Agent: ' . $user_agent,
+					'Browser sign-in (same credentials): ' . Guest_Key_Browser::url(),
+					$mcp['ready'] ? 'Optional MCP endpoint (Streamable HTTP, same HTTP Basic credentials): ' . self::endpoint() : 'Optional MCP unavailable: ' . $mcp['error']['message'] . ' Native REST commands and browser sign-in are ready.',
+				) ),
 			);
 		} );
 	}
@@ -154,6 +174,8 @@ final class Guest_Key_Access {
 				}
 			}
 		}
+		// Remove the actual native tokens too, so deactivating Guest Key cannot revive them.
+		( new Guest_Key_Browser_Sessions( $user_id ) )->revoke();
 		return true;
 	}
 
@@ -205,31 +227,51 @@ final class Guest_Key_Access {
 		}
 	}
 
-	/** Match both pretty REST URLs (including subdirectory installs) and ?rest_route=. */
-	private static function is_endpoint_request() {
-		if ( isset( $_GET['rest_route'] ) ) {
-			return self::ROUTE === untrailingslashit( '/' . ltrim( sanitize_text_field( wp_unslash( $_GET['rest_route'] ) ), '/' ) );
-		}
-		$path = rawurldecode( (string) wp_parse_url( wp_unslash( $_SERVER['REQUEST_URI'] ?? '' ), PHP_URL_PATH ) );
-		$expected = rawurldecode( (string) wp_parse_url( self::endpoint(), PHP_URL_PATH ) );
-		return untrailingslashit( $path ) === untrailingslashit( $expected );
-	}
-
 	public static function authenticate( $error, $user, $item ) {
 		if ( self::APP_ID !== ( $item['app_id'] ?? '' ) ) {
 			return;
 		}
 		$grant = self::grant( $user->ID );
-		if ( ! $grant || $grant['uuid'] !== $item['uuid'] || $grant['expires'] <= time() || $item['created'] + self::TTL <= time() ) {
+		if ( ! isset( $grant['uuid'], $grant['expires'], $grant['blog_id'], $grant['network_id'] ) || $grant['uuid'] !== $item['uuid'] || $grant['expires'] <= time() || $item['created'] + self::TTL <= time() ) {
 			$error->add( 'guest_key_expired', __( 'Guest Key access has expired or been revoked.', 'guest-key' ) );
 			return;
 		}
 		// The current user is not established yet. Capability filters (including Yoast's)
 		// may call wp_get_current_user(), recursively starting authentication again.
-		// Check administrator permissions in can_connect(), after authentication finishes.
-		if ( (int) $grant['blog_id'] !== get_current_blog_id() || ( ! self::is_endpoint_request() && ! Guest_Key_Browser::is_login_request() ) ) {
-			$error->add( 'guest_key_scope', __( 'This credential is restricted to this site’s Guest Key MCP endpoint and browser sign-in page.', 'guest-key' ) );
+		// Check administrator permissions only after authentication finishes. WordPress
+		// retains its own normal application-password API request detection.
+		if ( (int) $grant['blog_id'] !== get_current_blog_id() || (int) $grant['network_id'] !== get_current_network_id() ) {
+			$error->add( 'guest_key_scope', __( 'This credential is restricted to its issuing site.', 'guest-key' ) );
 		}
+	}
+
+	/** Runs only after native password verification succeeds. No capability checks here. */
+	public static function authenticated( $user, $item ) {
+		self::$authenticated_user_id = self::APP_ID === ( $item['app_id'] ?? '' ) ? (int) $user->ID : 0;
+	}
+
+	public static function authentication_failed() {
+		self::$authenticated_user_id = 0;
+	}
+
+	public static function is_guest_request( $user_id ) {
+		return $user_id && (int) $user_id === self::$authenticated_user_id;
+	}
+
+	/** The global current user exists now, preventing capability-filter authentication loops. */
+	public static function authorize_authenticated_user() {
+		$user_id = get_current_user_id();
+		if ( self::is_guest_request( $user_id ) && ! self::administrator( $user_id ) ) { wp_set_current_user( 0 ); }
+	}
+
+	public static function authorize_rest( $result ) {
+		if ( is_wp_error( $result ) ) { return $result; }
+		// Resolve lazy authentication before core's application-password error check at 90.
+		wp_get_current_user();
+		if ( self::$authenticated_user_id && ! self::administrator( self::$authenticated_user_id ) ) {
+			return new WP_Error( 'guest_key_forbidden', __( 'Administrator access is required for this temporary key.', 'guest-key' ), array( 'status' => 403 ) );
+		}
+		return $result;
 	}
 
 	public static function can_connect() {
