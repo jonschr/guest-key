@@ -111,7 +111,10 @@ try {
 	$key = Guest_Key_Access::create( $uid );
 	$cookies = $login( $key );
 	get_userdata( $uid )->set_role( 'subscriber' );
-	$assert( $anonymous( $cookies ), 'Demotion ends Guest Key browser access without authentication recursion' );
+	get_userdata( $uid )->add_cap( 'manage_options' );
+	$assert( $anonymous( $cookies ), 'Removing the administrator role ends Guest Key browser access even when manage_options is retained' );
+	$response = $http( Guest_Key_Browser::url(), 'POST', array( 'log' => $key['username'], 'pwd' => $key['password'], 'guest_key_nonce' => $nonce() ) );
+	$assert( 200 === wp_remote_retrieve_response_code( $response ) && ! $auth_cookies( $response ), 'A demoted account with manage_options cannot sign in again using its existing Guest Key' );
 	get_userdata( $uid )->set_role( 'administrator' );
 	$cookies = $login( $key );
 	$assert( true === Guest_Key_Access::revoke( $uid ) && $anonymous( $cookies ), 'Explicit revocation ends browser access' );

@@ -51,6 +51,13 @@ try {
 	$assert( 302 === $r['status'] && count( $cookies ) >= 2, 'A subsite credential signs into its browser form' );
 	$r = $http( $sub_admin, null, 'GET', array(), $cookies ); $assert( 200 === $r['status'], 'The temporary browser session accesses its issuing subsite' );
 	$r = $http( admin_url(), null, 'GET', array(), $cookies ); $assert( in_array( $r['status'], array( 302, 403 ), true ), 'The temporary browser session cannot access the main-site dashboard' );
+	switch_to_blog( $blog );
+	try {
+		get_userdata( $users['super'] )->set_role( 'subscriber' );
+		$assert( is_super_admin( $users['super'] ) && user_can( $users['super'], 'manage_options' ) && ! Guest_Key_Access::administrator( $users['super'] ) && is_wp_error( Guest_Key_Access::create( $users['super'] ) ), 'A super administrator must also have the administrator role on the issuing subsite' );
+		$r = $http( $sub_help, $second ); $assert( 403 === $r['status'], 'Removing only the issuing-site administrator role ends network API access' );
+		$r = $http( $sub_admin, null, 'GET', array(), $cookies ); $assert( 302 === $r['status'], 'Removing the issuing-site administrator role ends its Guest Key browser session' );
+	} finally { get_userdata( $users['super'] )->set_role( 'administrator' ); restore_current_blog(); }
 	wp_set_current_user( $owner ); revoke_super_admin( $users['super'] );
 	$r = $http( $sub_help, $second ); $assert( 403 === $r['status'], 'Removing super-administrator status ends network API access' );
 	grant_super_admin( $users['super'] );

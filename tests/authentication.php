@@ -111,8 +111,9 @@ try {
 	try { $assert( ! Guest_Key_Access::can_connect(), 'MCP honors filtered administrator permissions' ); }
 	finally { remove_filter( 'user_has_cap', $deny ); }
 	get_userdata( $uid )->set_role( 'subscriber' );
+	get_userdata( $uid )->add_cap( 'manage_options' );
 	$reset( $password );
-	$assert( 0 === get_current_user_id() && ! Guest_Key_Access::can_connect() && 1 === $attempts, 'A demoted administrator loses temporary API access' );
+	$assert( 0 === get_current_user_id() && ! Guest_Key_Access::can_connect() && 1 === $attempts, 'Removing the administrator role ends API access even when manage_options is retained' );
 	$response = $mcp( 'tools/list', new stdClass(), $session );
 	$assert( in_array( $response->get_status(), array( 401, 403 ), true ), 'The registered MCP route rejects a demoted administrator’s existing session' );
 	get_userdata( $uid )->set_role( 'administrator' );

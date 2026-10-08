@@ -26,7 +26,9 @@ final class Guest_Key_Access {
 		if ( ! $user_id ) {
 			return false;
 		}
-		return is_multisite() ? is_super_admin( $user_id ) : user_can( $user_id, 'manage_options' );
+		$user = get_userdata( $user_id );
+		return $user && in_array( 'administrator', $user->roles, true )
+			&& user_can( $user, 'manage_options' ) && ( ! is_multisite() || is_super_admin( $user_id ) );
 	}
 
 	public static function endpoint() {

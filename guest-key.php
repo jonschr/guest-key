@@ -3,7 +3,7 @@
  * Plugin Name: Guest Key
  * Plugin URI: https://elod.in
  * Description: One-click, six-hour administrator access through native WordPress APIs, MCP, and temporary browser sessions.
- * Version: 0.1.3
+ * Version: 0.1.4
  * Author: Jon Schroeder
  * Author URI: https://elod.in
  * Update URI: https://github.com/jonschr/guest-key
@@ -15,7 +15,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'GUEST_KEY_VERSION', '0.1.3' );
+define( 'GUEST_KEY_VERSION', '0.1.4' );
 define( 'GUEST_KEY_FILE', __FILE__ );
 define( 'GUEST_KEY_DIR', __DIR__ );
 

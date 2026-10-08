@@ -25,6 +25,7 @@ final class Guest_Key_Admin {
 	}
 
 	public static function network_menu() {
+		if ( ! Guest_Key_Access::administrator() ) { return; }
 		add_submenu_page( 'settings.php', 'Guest Key', 'Guest Key', 'manage_network_options', 'guest-key', array( __CLASS__, 'render' ) );
 	}
 

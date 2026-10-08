@@ -71,8 +71,13 @@ try {
 	$assert( 401 === $response['status'] && 'guest_key_expired' === $response['data']['code'], 'Expired credentials return an authentication error even on the public REST index' );
 	update_user_meta( $uid, Guest_Key_Access::META, $grant );
 	get_userdata( $uid )->set_role( 'subscriber' );
+	get_userdata( $uid )->add_cap( 'manage_options' );
 	$response = $http( 'GET', 'wp/v2/users/me', $key );
-	$assert( 403 === $response['status'] && 'guest_key_forbidden' === $response['data']['code'], 'Demotion removes native REST access without authentication recursion' );
+	$assert( 403 === $response['status'] && 'guest_key_forbidden' === $response['data']['code'], 'Removing the administrator role ends native REST access even when manage_options is retained' );
+	foreach ( array( 'guest-key/v1/help', 'guest-key/v1/files' ) as $route ) {
+		$response = $http( 'GET', $route, $key );
+		$assert( 403 === $response['status'] && 'guest_key_forbidden' === $response['data']['code'], 'A demoted account cannot use its existing key on ' . $route );
+	}
 	get_userdata( $uid )->set_role( 'administrator' );
 	$key2 = Guest_Key_Access::create( $uid );
 	$assert( ! is_wp_error( $key2 ), 'Issue a replacement temporary REST key' );
