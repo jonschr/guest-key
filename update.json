@@ -1,0 +1,14 @@
+{
+  "name": "Guest Key",
+  "slug": "guest-key",
+  "version": "0.1.0",
+  "author": "Jon Schroeder",
+  "homepage": "https://elod.in",
+  "requires": "6.9",
+  "requires_php": "7.4",
+  "download_url": "https://github.com/jonschr/guest-key/archive/refs/tags/0.1.0.zip",
+  "sections": {
+    "description": "One-click, six-hour administrator access to registered WordPress abilities through the official MCP Adapter.",
+    "changelog": "<h4>0.1.0</h4><ul><li>Temporary MCP access with credential rotation, six-hour expiry, and automatic adapter setup.</li><li>23 native admin abilities for content, accounts, settings, media, navigation, templates, plugins, themes, and updates, without direct file-editing tools.</li><li>Registered abilities inventory with source attribution and modal inspection.</li></ul>"
+  }
+}
