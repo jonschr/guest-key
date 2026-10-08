@@ -117,35 +117,27 @@ final class Guest_Key_Admin {
 			</details>
 			<details id="guest-key-inventory" class="guest-key-details">
 				<summary><?php esc_html_e( 'Technical inventory', 'guest-key' ); ?></summary>
-				<p><?php esc_html_e( 'An optional reference for registered abilities and MCP servers. Your agent discovers commands automatically.', 'guest-key' ); ?></p>
-			<div class="guest-key-search"><label for="guest-key-search"><?php esc_html_e( 'Search the inventory', 'guest-key' ); ?></label> <input type="search" id="guest-key-search" placeholder="<?php esc_attr_e( 'Search abilities, servers, or source…', 'guest-key' ); ?>"> <span id="guest-key-search-count" role="status" aria-live="polite"></span></div>
+			<div class="guest-key-search"><label for="guest-key-search" class="screen-reader-text"><?php esc_html_e( 'Search the inventory', 'guest-key' ); ?></label><input type="search" id="guest-key-search" placeholder="<?php esc_attr_e( 'Search abilities, servers, or source…', 'guest-key' ); ?>"> <span id="guest-key-search-count" role="status" aria-live="polite"><?php echo esc_html( sprintf( __( '%d entries', 'guest-key' ), count( $rows ) + count( $discovery ) ) ); ?></span></div>
+			<ul class="guest-key-inventory-list" data-guest-key-section>
 			<?php require __DIR__ . '/admin-discovery.php'; ?>
-			<section data-guest-key-section>
-			<h2><?php echo esc_html( sprintf( __( 'Registered abilities (%d)', 'guest-key' ), count( $rows ) ) ); ?></h2>
-			<p><?php esc_html_e( 'MCP exposes command help and execution. All registered abilities remain discoverable and callable through the commands, with their own permission and input checks. Public exposure settings stay unchanged.', 'guest-key' ); ?></p>
-			<table class="widefat striped guest-key-table"><thead><tr><th scope="col"><?php esc_html_e( 'Ability', 'guest-key' ); ?></th><th scope="col"><?php esc_html_e( 'Registered by', 'guest-key' ); ?></th><th scope="col"><?php esc_html_e( 'Category', 'guest-key' ); ?></th><th scope="col"><?php esc_html_e( 'Details', 'guest-key' ); ?></th></tr></thead><tbody>
 			<?php foreach ( $rows as $row ) : ?>
-				<tr data-guest-key-ability data-guest-key-item>
-					<td><strong><?php echo esc_html( $row['label'] ); ?></strong><br><code><?php echo esc_html( $row['name'] ); ?></code><p><?php echo esc_html( $row['description'] ); ?></p></td>
-					<td><strong><?php echo esc_html( $row['source']['name'] ); ?></strong><br><span class="description"><?php echo esc_html( $row['source']['type'] ); ?><?php echo 'callback' === $row['source']['method'] ? ' · ' . esc_html__( 'inferred from callback', 'guest-key' ) : ''; ?></span></td>
-					<td><?php echo esc_html( $row['category'] ); ?></td>
-					<td><button type="button" class="button" data-guest-key-inspect aria-haspopup="dialog" aria-label="<?php echo esc_attr( sprintf( __( 'Inspect ability: %s', 'guest-key' ), $row['label'] ) ); ?>"><?php esc_html_e( 'Inspect ability', 'guest-key' ); ?></button>
-						<template data-guest-key-ability-content>
-						<h2><?php echo esc_html( $row['label'] ); ?></h2>
-						<p><code><?php echo esc_html( $row['name'] ); ?></code></p>
-						<p><?php echo esc_html( $row['description'] ); ?></p>
-						<p><strong><?php esc_html_e( 'Registered by:', 'guest-key' ); ?></strong> <?php echo esc_html( $row['source']['name'] . ' (' . $row['source']['type'] . ')' ); ?><?php echo 'callback' === $row['source']['method'] ? ' · ' . esc_html__( 'inferred from callback', 'guest-key' ) : ''; ?></p>
-						<p><strong><?php esc_html_e( 'Category:', 'guest-key' ); ?></strong> <?php echo esc_html( $row['category'] ); ?></p>
-						<?php if ( $row['source']['file'] ) : ?><p><strong><?php esc_html_e( 'Source:', 'guest-key' ); ?></strong><br><code><?php echo esc_html( $row['source']['file'] . ':' . $row['source']['line'] ); ?></code></p><?php endif; ?>
-						<?php foreach ( array( 'input' => __( 'Input schema', 'guest-key' ), 'output' => __( 'Output schema', 'guest-key' ), 'meta' => __( 'Metadata', 'guest-key' ) ) as $key => $label ) : ?>
-							<h3><?php echo esc_html( $label ); ?></h3><pre><?php echo esc_html( wp_json_encode( $row[ $key ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) ); ?></pre>
-						<?php endforeach; ?>
-						</template>
-					</td>
-				</tr>
+				<li data-guest-key-ability data-guest-key-item>
+					<button type="button" class="button-link" data-guest-key-inspect aria-haspopup="dialog" aria-label="<?php echo esc_attr( sprintf( __( 'Inspect ability: %s', 'guest-key' ), $row['label'] ) ); ?>"><?php echo esc_html( $row['name'] ); ?></button>
+					<span class="description"><?php echo esc_html( $row['source']['name'] ); ?></span>
+					<template data-guest-key-ability-content>
+					<h2><?php echo esc_html( $row['label'] ); ?></h2>
+					<p><code><?php echo esc_html( $row['name'] ); ?></code></p>
+					<p><?php echo esc_html( $row['description'] ); ?></p>
+					<p><strong><?php esc_html_e( 'Registered by:', 'guest-key' ); ?></strong> <?php echo esc_html( $row['source']['name'] . ' (' . $row['source']['type'] . ')' ); ?><?php echo 'callback' === $row['source']['method'] ? ' · ' . esc_html__( 'inferred from callback', 'guest-key' ) : ''; ?></p>
+					<p><strong><?php esc_html_e( 'Category:', 'guest-key' ); ?></strong> <?php echo esc_html( $row['category'] ); ?></p>
+					<?php if ( $row['source']['file'] ) : ?><p><strong><?php esc_html_e( 'Source:', 'guest-key' ); ?></strong><br><code><?php echo esc_html( $row['source']['file'] . ':' . $row['source']['line'] ); ?></code></p><?php endif; ?>
+					<?php foreach ( array( 'input' => __( 'Input schema', 'guest-key' ), 'output' => __( 'Output schema', 'guest-key' ), 'meta' => __( 'Metadata', 'guest-key' ) ) as $key => $label ) : ?>
+						<h3><?php echo esc_html( $label ); ?></h3><pre><?php echo esc_html( wp_json_encode( $row[ $key ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) ); ?></pre>
+					<?php endforeach; ?>
+					</template>
+				</li>
 			<?php endforeach; ?>
-			</tbody></table>
-			</section>
+			</ul>
 			<p id="guest-key-empty" hidden><?php esc_html_e( 'No matching inventory entries.', 'guest-key' ); ?></p>
 			</details>
 		</div>

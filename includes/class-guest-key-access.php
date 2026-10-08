@@ -140,7 +140,6 @@ final class Guest_Key_Access {
 				$mcp['error'] = array( 'code' => $ready->get_error_code(), 'message' => $ready->get_error_message() );
 				update_option( 'guest_key_dependency_error', $ready->get_error_message(), false );
 			}
-			$user_agent = 'GuestKey/' . GUEST_KEY_VERSION . ' (+https://elod.in/guest-key-wordpress-mcp)';
 			return array(
 				'endpoint' => $mcp['ready'] ? self::endpoint() : null,
 				'mcp' => $mcp,
@@ -157,7 +156,9 @@ final class Guest_Key_Access {
 					'Username: ' . $user->user_login,
 					'Application password: ' . $password,
 					'Expires: ' . $expires,
-					'User-Agent: ' . $user_agent,
+					'For all programmatic HTTP and MCP requests, including discovery, retries and diagnostics, send User-Agent: <client>/<version> (user-directed AI agent; agent=<agent>; model=<model>). Use your actual client/version, agent and model; omit unknown fields or /version rather than inventing values. Keep the phrase "user-directed AI agent" and reuse the same identifier throughout the session.',
+					'Example only: User-Agent: T3Code/0.0.46-nightly.20261005.2689 (user-directed AI agent; agent=Codex; model=gpt-6.1-sol). In T3 Code, resolve serverVersion from t3_environment_read and agent/model from t3_thread_configuration (modelSelection.instanceId and modelSelection.model), or authoritative runtime information. Use readable agent names such as Codex.',
+					'Set the actual header using supported HTTP-client or MCP-transport controls; configure downstream HTTP requests separately where supported. Keep interactive browser user agents unchanged. If headers cannot be configured, continue and report that limitation; do not claim the identifier was sent.',
 					'Browser sign-in (same credentials): ' . Guest_Key_Browser::url(),
 					$mcp['ready'] ? 'Optional MCP endpoint (Streamable HTTP, same HTTP Basic credentials): ' . self::endpoint() : 'Optional MCP unavailable: ' . $mcp['error']['message'] . ' Native REST commands and browser sign-in are ready.',
 				) ),

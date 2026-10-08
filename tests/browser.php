@@ -56,7 +56,7 @@ try {
 	wp_set_current_user( $uid );
 	$key = Guest_Key_Access::create( $uid );
 	$assert( ! is_wp_error( $key ) && false !== strpos( $key['bundle'], Guest_Key_Browser::url() ), 'Copied instructions include browser sign-in using the same credential' );
-	$assert( false !== strpos( $key['bundle'], 'User-Agent: GuestKey/' . GUEST_KEY_VERSION . ' (+https://elod.in/guest-key-wordpress-mcp)' ) && false === strpos( $key['bundle'], '<client>' ), 'Copied instructions identify Guest Key with its version and documentation URL' );
+	$assert( false !== strpos( $key['bundle'], 'User-Agent: <client>/<version> (user-directed AI agent; agent=<agent>; model=<model>)' ) && false !== strpos( $key['bundle'], 'Example only: User-Agent: T3Code/0.0.46-nightly.20261005.2689 (user-directed AI agent; agent=Codex; model=gpt-6.1-sol)' ) && false !== strpos( $key['bundle'], 'omit unknown fields or /version' ) && false !== strpos( $key['bundle'], 'Keep interactive browser user agents unchanged' ), 'Copied instructions identify the requesting client and agent, with an example and honest fallbacks' );
 	$cookies = $login( $key );
 	$response = $http( admin_url(), 'GET', array(), $cookies );
 	$assert( 200 === wp_remote_retrieve_response_code( $response ) && false !== strpos( wp_remote_retrieve_body( $response ), 'wp-admin-bar-my-account' ), 'Temporary browser session accesses wp-admin' );
@@ -72,7 +72,7 @@ try {
 	}
 	$response = $http( Guest_Key_Admin::page_url(), 'GET', array(), $cookies );
 	$html = wp_remote_retrieve_body( $response );
-	$assert( false !== strpos( $html, 'Registered abilities' ) && false === strpos( $html, '<button type="button" class="button button-primary" data-guest-key-create' ), 'Temporary sessions can inspect abilities without issuing new keys' );
+	$assert( false !== strpos( $html, 'data-guest-key-ability' ) && false === strpos( $html, '<button type="button" class="button button-primary" data-guest-key-create' ), 'Temporary sessions can inspect abilities without issuing new keys' );
 	if ( ! preg_match( '/"nonce":"([^"]+)"/', $html, $match ) ) { throw new RuntimeException( 'Admin nonce missing.' ); }
 	$response = $http( admin_url( 'admin-ajax.php' ), 'POST', array( 'action' => 'guest_key_create', 'nonce' => $match[1] ), $cookies );
 	$assert( 403 === wp_remote_retrieve_response_code( $response ), 'Temporary browser session cannot extend its access through AJAX' );
