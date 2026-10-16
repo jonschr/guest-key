@@ -21,7 +21,8 @@ try {
 	$x = $render();
 	$assert( 1 === $x->query( '//button[@data-guest-key-create]' )->length, 'The primary action creates and copies connection details' );
 	$assert( $x->query( '//button[@data-guest-key-revoke]' )->item( 0 )->hasAttribute( 'hidden' ), 'No-access state hides the revoke action' );
-	$assert( 2 === $x->query( '//details' )->length && 0 === $x->query( '//details[@open]' )->length, 'Connection details and inventory are collapsed by default' );
+	$assert( 3 === $x->query( '//details' )->length && 0 === $x->query( '//details[@open]' )->length, 'Connection details, diagnostics and inventory are collapsed by default' );
+	$assert( 1 === $x->query( '//button[@data-guest-key-diagnostics]' )->length && $x->query( '//textarea[@id="guest-key-diagnostic-report"]' )->item( 0 )->hasAttribute( 'readonly' ), 'Diagnostics offer a copy action and a manual-copy report' );
 	$assert( false !== strpos( $x->query( '//section[@aria-labelledby="guest-key-connect-title"]' )->item( 0 )->textContent, 'administrator access' ), 'The connection card explains the scope of access' );
 	$assert( false !== strpos( $x->query( '//section[@aria-labelledby="guest-key-connect-title"]' )->item( 0 )->textContent, 'paste them into your local agent' ), 'The page explains the handoff to a local agent' );
 	$assert( $x->query( '//p[@id="guest-key-grant-status"]' )->item( 0 )->hasAttribute( 'aria-live' ), 'Access status updates are announced to assistive technology' );

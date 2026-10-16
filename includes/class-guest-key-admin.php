@@ -11,6 +11,7 @@ final class Guest_Key_Admin {
 		add_action( 'wp_enqueue_scripts', array( __CLASS__, 'assets' ) );
 		add_action( 'admin_notices', array( __CLASS__, 'dependency_notice' ) );
 		add_action( 'network_admin_notices', array( __CLASS__, 'dependency_notice' ) );
+		add_action( 'wp_ajax_guest_key_diagnostics', array( __CLASS__, 'ajax_diagnostics' ) );
 	}
 
 	public static function page_url() {
@@ -62,6 +63,8 @@ final class Guest_Key_Admin {
 				'active' => __( 'Ready', 'guest-key' ), 'inactive' => __( 'Setup will be attempted when you create access', 'guest-key' ),
 				'mcpUnavailable' => __( 'MCP unavailable; REST and browser access are ready.', 'guest-key' ),
 				'manualCopy' => __( 'Select and copy these connection details using your browser’s Copy command.', 'guest-key' ),
+				'diagnosticsCopied' => __( 'Diagnostics copied. Share this report with support.', 'guest-key' ),
+				'diagnosticsSelect' => __( 'Diagnostics are selected. Use your browser’s Copy command.', 'guest-key' ),
 			),
 		) );
 	}
@@ -74,6 +77,42 @@ final class Guest_Key_Admin {
 		if ( $message ) {
 			echo '<div class="notice notice-warning"><p><strong>Guest Key:</strong> ' . esc_html__( 'MCP setup is unavailable. REST commands and browser access can still be created.', 'guest-key' ) . ' ' . esc_html( $message ) . ' <a href="' . esc_url( self::page_url() ) . '">' . esc_html__( 'Open Guest Key to retry', 'guest-key' ) . '</a></p></div>';
 		}
+	}
+
+	public static function diagnostics() {
+		if ( ! Guest_Key_Access::administrator() ) {
+			return new WP_Error( 'guest_key_forbidden', __( 'Administrator access is required.', 'guest-key' ) );
+		}
+		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		require_once ABSPATH . 'wp-admin/includes/file.php';
+		$file = WP_PLUGIN_DIR . '/' . Guest_Key_Dependency::PLUGIN;
+		$installed = file_exists( $file );
+		$data = $installed ? get_plugin_data( $file, false, false ) : array();
+		$routes = rest_get_server()->get_routes();
+		return array(
+			'generated_utc' => gmdate( 'c' ), 'guest_key' => GUEST_KEY_VERSION,
+			'wordpress' => get_bloginfo( 'version' ), 'php' => PHP_VERSION, 'multisite' => is_multisite(),
+			'adapter' => array(
+				'installed' => $installed, 'version' => $data['Version'] ?? null,
+				'active' => is_plugin_active( Guest_Key_Dependency::PLUGIN ),
+				'loaded_version' => defined( 'WP_MCP_VERSION' ) ? WP_MCP_VERSION : null,
+				'endpoint_registered' => isset( $routes[ Guest_Key_Access::ROUTE ] ),
+			),
+			'application_passwords_available' => wp_is_application_passwords_available_for_user( wp_get_current_user() ),
+			'can_install_plugins' => current_user_can( 'install_plugins' ),
+			'file_mods_allowed' => wp_is_file_mod_allowed( 'guest_key_install_plugin' ),
+			'filesystem_method' => get_filesystem_method(), 'plugins_directory_writable' => is_writable( WP_PLUGIN_DIR ),
+			'update_feed_host' => wp_parse_url( GUEST_KEY_UPDATE_URL, PHP_URL_HOST ),
+			'current_mcp_error' => Guest_Key_Dependency::diagnostic_message( get_option( 'guest_key_dependency_error', '' ) ),
+			'last_mcp_failure' => get_option( 'guest_key_dependency_last_error', null ),
+		);
+	}
+
+	public static function ajax_diagnostics() {
+		check_ajax_referer( 'guest_key_access', 'nonce' );
+		$report = self::diagnostics();
+		if ( is_wp_error( $report ) ) { wp_send_json_error( array( 'message' => $report->get_error_message() ), 403 ); }
+		wp_send_json_success( $report );
 	}
 
 	public static function render() {
@@ -114,6 +153,15 @@ final class Guest_Key_Admin {
 					<p><a href="<?php echo esc_url( Guest_Key_Browser::url() ); ?>"><?php esc_html_e( 'Guest Key browser sign-in', 'guest-key' ); ?></a></p>
 					<p class="description"><?php esc_html_e( 'The copied details include everything your agent needs. REST commands and browser sign-in work independently of optional MCP setup.', 'guest-key' ); ?></p>
 					<p class="description"><?php esc_html_e( 'If a connection fails, check the expiry and confirm your host or security plugin allows WordPress REST requests and application passwords.', 'guest-key' ); ?></p>
+				</div>
+			</details>
+			<details id="guest-key-diagnostics" class="guest-key-details">
+				<summary><?php esc_html_e( 'Diagnostics', 'guest-key' ); ?></summary>
+				<div class="guest-key-details-content">
+					<p><?php esc_html_e( 'Copy this report when asking for help. It includes setup status and the most recent MCP setup failure, even after recovery. Passwords and temporary access details are excluded.', 'guest-key' ); ?></p>
+					<label for="guest-key-diagnostic-report" class="screen-reader-text"><?php esc_html_e( 'Diagnostic report', 'guest-key' ); ?></label>
+					<textarea id="guest-key-diagnostic-report" class="large-text code" rows="14" readonly><?php echo esc_textarea( wp_json_encode( self::diagnostics(), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) ); ?></textarea>
+					<p><button type="button" class="button" data-guest-key-diagnostics><?php esc_html_e( 'Copy diagnostics', 'guest-key' ); ?></button></p>
 				</div>
 			</details>
 			<details id="guest-key-inventory" class="guest-key-details">

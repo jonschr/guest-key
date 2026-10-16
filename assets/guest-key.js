@@ -187,6 +187,27 @@
 		}
 	}
 
+	document.querySelector('[data-guest-key-diagnostics]')?.addEventListener('click', async event => {
+		const button = event.currentTarget;
+		const field = document.getElementById('guest-key-diagnostic-report');
+		button.disabled = true;
+		try {
+			field.value = JSON.stringify(await request('guest_key_diagnostics'), null, 2);
+			try {
+				await navigator.clipboard.writeText(field.value);
+				status(s.diagnosticsCopied);
+			} catch {
+				field.focus();
+				field.select();
+				status(s.diagnosticsSelect);
+			}
+		} catch (error) {
+			status(error.message || s.error, true);
+		} finally {
+			button.disabled = false;
+		}
+	});
+
 	document.querySelector('#wp-admin-bar-guest-key-access > .ab-item')?.addEventListener('click', createAccess);
 	document.querySelector('#wp-admin-bar-guest-key-revoke > .ab-item')?.addEventListener('click', revokeAccess);
 	document.querySelectorAll('[data-guest-key-create]').forEach(button => button.addEventListener('click', createAccess));

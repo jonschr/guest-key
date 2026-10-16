@@ -40,13 +40,14 @@ try {
 		new WP_Http_Cookie( array( 'name' => LOGGED_IN_COOKIE, 'value' => $login_cookie, 'path' => '/' ) ),
 		new WP_Http_Cookie( array( 'name' => SECURE_AUTH_COOKIE, 'value' => wp_generate_auth_cookie( $uid, time() + HOUR_IN_SECONDS, 'secure_auth', $token ), 'path' => '/' ) ),
 	);
-	foreach ( array( 'guest_key_create', 'guest_key_revoke' ) as $action ) {
+	foreach ( array( 'guest_key_create', 'guest_key_revoke', 'guest_key_diagnostics' ) as $action ) {
 		$requests++;
 		$response = wp_remote_post( admin_url( 'admin-ajax.php' ), array( 'body' => array( 'action' => $action, 'nonce' => wp_create_nonce( 'guest_key_access' ) ), 'cookies' => $http_cookies, 'sslverify' => false, 'redirection' => 0, 'timeout' => 15, 'user-agent' => 'T3Code/0.0.46-nightly.20261005.2689 (user-directed AI agent; agent=Codex; model=gpt-6.1-sol)' ) );
 		if ( is_wp_error( $response ) ) { throw new RuntimeException( $response->get_error_message() ); }
 		if ( 429 === wp_remote_retrieve_response_code( $response ) ) { throw new RuntimeException( 'Rate limited; stop testing.' ); }
 		$data = json_decode( wp_remote_retrieve_body( $response ), true );
-		$assert( 403 === wp_remote_retrieve_response_code( $response ) && isset( $data['data']['message'] ) && 'Use an administrator’s logged-in browser session to manage access.' === $data['data']['message'], 'Custom-role AJAX ' . $action . ' is denied even with a valid session and nonce' );
+		$expected = 'guest_key_diagnostics' === $action ? 'Administrator access is required.' : 'Use an administrator’s logged-in browser session to manage access.';
+		$assert( 403 === wp_remote_retrieve_response_code( $response ) && isset( $data['data']['message'] ) && $expected === $data['data']['message'], 'Custom-role AJAX ' . $action . ' is denied even with a valid session and nonce' );
 	}
 	foreach ( array( home_url( '/' ), Guest_Key_Admin::page_url() ) as $url ) {
 		$requests++;

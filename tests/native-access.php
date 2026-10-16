@@ -6,6 +6,7 @@ error_reporting( E_ALL & ~E_DEPRECATED );
 require_once ABSPATH . 'wp-admin/includes/user.php';
 $owner = get_current_user_id(); $grants = Guest_Key_Access::grants();
 $saved_error = get_option( 'guest_key_dependency_error', null );
+$saved_last_error = get_option( 'guest_key_dependency_last_error', null );
 $server = $_SERVER; $get = $_GET; $saved_pagenow = $GLOBALS['pagenow'];
 $checks = 0;
 $assert = static function ( $condition, $message ) use ( &$checks ) { if ( ! $condition ) { throw new RuntimeException( $message ); } $checks++; echo 'PASS: ' . $message . "\n"; };
@@ -40,6 +41,7 @@ try {
 	remove_filter( 'option_guest_key_adapter_managed', $managed );
 	remove_filter( 'option_active_plugins', $active_plugins );
 	if ( null === $saved_error ) { delete_option( 'guest_key_dependency_error' ); } else { update_option( 'guest_key_dependency_error', $saved_error, false ); }
+	if ( null === $saved_last_error ) { delete_option( 'guest_key_dependency_last_error' ); } else { update_option( 'guest_key_dependency_last_error', $saved_last_error, false ); }
 	$_SERVER = $server; $_GET = $get; $GLOBALS['pagenow'] = $saved_pagenow;
 	$assert( $grants === Guest_Key_Access::grants(), 'Existing grants are preserved after missing-adapter verification' );
 }

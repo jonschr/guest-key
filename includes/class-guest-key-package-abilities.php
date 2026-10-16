@@ -41,7 +41,7 @@ final class Guest_Key_Package_Abilities {
 		}
 		$info = themes_api( 'theme_information', array( 'slug' => $input['slug'], 'fields' => array( 'sections' => false ) ) );
 		if ( is_wp_error( $info ) ) { return $info; }
-		$skin = new Automatic_Upgrader_Skin();
+		$skin = new WP_Ajax_Upgrader_Skin();
 		$upgrader = new Theme_Upgrader( $skin );
 		$result = self::upgrade_result( $upgrader->install( $info->download_link ), $skin );
 		if ( is_wp_error( $result ) ) { return $result; }
@@ -110,7 +110,7 @@ final class Guest_Key_Package_Abilities {
 		if ( is_wp_error( $ready ) ) { return $ready; }
 		require_once ABSPATH . 'wp-admin/includes/update.php';
 		require_once ABSPATH . 'wp-admin/includes/plugin.php';
-		$skin = new Automatic_Upgrader_Skin();
+		$skin = new WP_Ajax_Upgrader_Skin();
 		$target = $input['target'];
 		if ( 'plugin' === $type ) {
 			$plugins = get_plugins();

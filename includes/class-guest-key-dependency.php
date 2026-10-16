@@ -42,8 +42,24 @@ final class Guest_Key_Dependency {
 			return self::ensure( $network_wide );
 		} );
 		if ( is_wp_error( $result ) ) {
-			update_option( 'guest_key_dependency_error', $result->get_error_message(), false );
+			self::record_error( $result );
 		}
+	}
+
+	public static function diagnostic_message( $message ) {
+		$message = wp_strip_all_tags( (string) $message );
+		// Reports omit URLs, filesystem paths, authorization headers and application passwords.
+		$message = preg_replace( '~https?://\S+|(?:[A-Za-z]:)?/(?:[^\s/]+/)+[^\s]*|\b(?:Basic|Bearer)\s+\S+|\b(?:[A-Za-z0-9]{4} ){5}[A-Za-z0-9]{4}\b|\b[A-Za-z0-9]{24}\b~i', '[redacted]', $message );
+		return wp_html_excerpt( $message, 2000 );
+	}
+
+	public static function record_error( $error ) {
+		update_option( 'guest_key_dependency_error', $error->get_error_message(), false );
+		// Retain one failure after recovery so a successful retry does not erase the evidence.
+		update_option( 'guest_key_dependency_last_error', array(
+			'time_utc' => gmdate( 'c' ), 'code' => $error->get_error_code(),
+			'message' => self::diagnostic_message( $error->get_error_message() ),
+		), false );
 	}
 
 	public static function ensure( $network_wide = null ) {
@@ -75,7 +91,7 @@ final class Guest_Key_Dependency {
 			if ( 'mcp-adapter' !== ( $info->slug ?? '' ) || ! preg_match( '#^https://downloads\.wordpress\.org/plugin/mcp-adapter\.[a-zA-Z0-9.-]+\.zip$#', $info->download_link ?? '' ) ) {
 				return new WP_Error( 'guest_key_package', __( 'WordPress.org did not return an official MCP Adapter package.', 'guest-key' ) );
 			}
-			$skin = new Automatic_Upgrader_Skin();
+			$skin = new WP_Ajax_Upgrader_Skin();
 			$installer = new Plugin_Upgrader( $skin );
 			$result = $installer->install( $info->download_link );
 			if ( is_wp_error( $result ) ) {
@@ -83,7 +99,7 @@ final class Guest_Key_Dependency {
 			}
 			if ( ! $result ) {
 				$errors = $skin->get_errors();
-				return new WP_Error( 'guest_key_install', __( 'WordPress could not install the MCP Adapter. Check filesystem permissions and retry. ', 'guest-key' ) . $errors->get_error_message() );
+				return new WP_Error( 'guest_key_install', __( 'WordPress could not install the MCP Adapter. Check filesystem permissions or configured FTP/SSH credentials, then retry. ', 'guest-key' ) . $errors->get_error_message() );
 			}
 		}
 		$data = get_plugin_data( WP_PLUGIN_DIR . '/' . self::PLUGIN, false, false );

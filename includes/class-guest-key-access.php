@@ -140,7 +140,7 @@ final class Guest_Key_Access {
 			$mcp = array( 'ready' => ! is_wp_error( $ready ) );
 			if ( is_wp_error( $ready ) ) {
 				$mcp['error'] = array( 'code' => $ready->get_error_code(), 'message' => $ready->get_error_message() );
-				update_option( 'guest_key_dependency_error', $ready->get_error_message(), false );
+				Guest_Key_Dependency::record_error( $ready );
 			}
 			return array(
 				'endpoint' => $mcp['ready'] ? self::endpoint() : null,
