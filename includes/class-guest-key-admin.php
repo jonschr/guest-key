@@ -4,6 +4,7 @@ defined( 'ABSPATH' ) || exit;
 final class Guest_Key_Admin {
 
 	public static function init() {
+		add_action( 'admin_post_guest_key_save_duration', array( __CLASS__, 'save_duration' ) );
 		add_action( 'admin_menu', array( __CLASS__, 'menu' ) );
 		add_action( 'network_admin_menu', array( __CLASS__, 'network_menu' ) );
 		add_action( 'admin_bar_menu', array( __CLASS__, 'toolbar' ), 999 );
@@ -12,6 +13,16 @@ final class Guest_Key_Admin {
 		add_action( 'admin_notices', array( __CLASS__, 'dependency_notice' ) );
 		add_action( 'network_admin_notices', array( __CLASS__, 'dependency_notice' ) );
 		add_action( 'wp_ajax_guest_key_diagnostics', array( __CLASS__, 'ajax_diagnostics' ) );
+	}
+
+	public static function save_duration() {
+		if ( Guest_Key_Browser::is_guest_session() || ! Guest_Key_Access::administrator() || ! wp_get_session_token() || rest_get_authenticated_app_password() ) {
+			wp_die( esc_html__( 'Use an administrator’s logged-in browser session to manage access.', 'guest-key' ), '', array( 'response' => 403 ) );
+		}
+		check_admin_referer( 'guest_key_duration' );
+		$result = Guest_Key_Access::set_duration( wp_unslash( $_POST['guest_key_duration_minutes'] ?? '' ) );
+		wp_safe_redirect( add_query_arg( 'guest-key-duration', is_wp_error( $result ) ? 'invalid' : 'saved', wp_get_referer() ?: self::page_url() ) . '#guest-key-duration-settings' );
+		exit;
 	}
 
 	public static function page_url() {
@@ -30,28 +41,42 @@ final class Guest_Key_Admin {
 		add_submenu_page( 'settings.php', 'Guest Key', 'Guest Key', 'manage_network_options', 'guest-key', array( __CLASS__, 'render' ) );
 	}
 
+	private static function duration_label() {
+		$minutes = (int) ( Guest_Key_Access::duration() / MINUTE_IN_SECONDS );
+		if ( 0 === $minutes % 60 ) {
+			$hours = (int) ( $minutes / 60 );
+			return sprintf( _n( '%s hour', '%s hours', $hours, 'guest-key' ), number_format_i18n( $hours ) );
+		}
+		return sprintf( _n( '%s minute', '%s minutes', $minutes, 'guest-key' ), number_format_i18n( $minutes ) );
+	}
+
 	public static function toolbar( $bar ) {
 		if ( ! Guest_Key_Access::administrator() || Guest_Key_Browser::is_guest_session() ) {
 			return;
 		}
 		$bar->add_node( array(
 			'id' => 'guest-key-access', 'href' => self::page_url(),
-			'title' => '<span class="ab-icon dashicons dashicons-admin-page" aria-hidden="true"></span><span class="ab-label">' . esc_html__( 'Connect agent', 'guest-key' ) . '</span>',
-			'meta' => array( 'title' => __( 'Create and copy six-hour Guest Key access', 'guest-key' ) ),
+			'title' => '<span class="ab-icon dashicons dashicons-admin-page" aria-hidden="true"></span><span class="ab-label">' . esc_html__( 'Copy Guest Key', 'guest-key' ) . '</span>',
+			'meta' => array( 'title' => sprintf( __( 'Create and copy Guest Key access for up to %s', 'guest-key' ), self::duration_label() ) ),
 		) );
 		$bar->add_node( array( 'id' => 'guest-key-abilities', 'parent' => 'guest-key-access', 'title' => __( 'Technical inventory', 'guest-key' ), 'href' => self::page_url() . '#guest-key-inventory' ) );
+		$bar->add_node( array( 'id' => 'guest-key-license', 'parent' => 'guest-key-access', 'title' => __( 'License & trial', 'guest-key' ), 'href' => self::page_url() ) );
 		$bar->add_node( array( 'id' => 'guest-key-revoke', 'parent' => 'guest-key-access', 'title' => __( 'Revoke my access', 'guest-key' ), 'href' => self::page_url() ) );
 	}
 
 	public static function assets() {
-		if ( ! Guest_Key_Access::administrator() || ( ! is_admin() && ! is_admin_bar_showing() ) ) {
+		if ( ! Guest_Key_Access::administrator() || Guest_Key_Browser::is_guest_session() || ( ! is_admin() && ! is_admin_bar_showing() ) ) {
 			return;
 		}
 		$url = plugin_dir_url( GUEST_KEY_FILE );
-		wp_enqueue_style( 'guest-key', $url . 'assets/guest-key.css', array( 'dashicons' ), GUEST_KEY_VERSION );
-		wp_enqueue_script( 'guest-key', $url . 'assets/guest-key.js', array(), GUEST_KEY_VERSION, true );
+		$version = GUEST_KEY_VERSION;
+		if ( in_array( wp_get_environment_type(), array( 'local', 'development' ), true ) ) { $version .= '.' . max( filemtime( GUEST_KEY_DIR . '/assets/guest-key.js' ), filemtime( GUEST_KEY_DIR . '/assets/guest-key.css' ) ); }
+		wp_enqueue_style( 'guest-key', $url . 'assets/guest-key.css', array( 'dashicons' ), $version );
+		wp_enqueue_script( 'guest-key', $url . 'assets/guest-key.js', array(), $version, true );
 		wp_localize_script( 'guest-key', 'guestKey', array(
 			'ajaxUrl' => admin_url( 'admin-ajax.php' ), 'nonce' => wp_create_nonce( 'guest_key_access' ),
+			'licensing' => Guest_Key_License::view(),
+			'noticeKey' => get_current_blog_id() . ':' . get_current_user_id(), 'settingsUrl' => self::page_url() . '#guest-key-license-settings',
 			'strings' => array(
 				'creating' => __( 'Preparing Guest Key…', 'guest-key' ), 'created' => __( 'Guest Key access created.', 'guest-key' ),
 				'copied' => __( 'Connection details copied. Paste them into your agent.', 'guest-key' ), 'expires' => __( 'Expires: ', 'guest-key' ),
@@ -65,6 +90,24 @@ final class Guest_Key_Admin {
 				'manualCopy' => __( 'Select and copy these connection details using your browser’s Copy command.', 'guest-key' ),
 				'diagnosticsCopied' => __( 'Diagnostics copied. Share this report with support.', 'guest-key' ),
 				'diagnosticsSelect' => __( 'Diagnostics are selected. Use your browser’s Copy command.', 'guest-key' ),
+				'licenseSettings' => __( 'License & trial', 'guest-key' ),
+				'automaticLicense' => __( 'Purchasing with %s? Your license will connect automatically.', 'guest-key' ),
+				'purchasePending' => __( 'No license is connected yet. Check your purchase email or enter a key below.', 'guest-key' ),
+				'checkPurchase' => __( 'Check for my purchase', 'guest-key' ),
+				'licenseTitle' => __( 'Unlock Guest Key', 'guest-key' ),
+				'trialIntro' => __( 'Try every feature free for 24 hours. No card required.', 'guest-key' ),
+				'trialExpired' => __( 'Your free trial has ended. Add a license to keep connecting your agent.', 'guest-key' ),
+				'licenseExpired' => __( 'Your license has expired or is inactive. Renew it, then check again.', 'guest-key' ),
+				'licenseCheckNeeded' => __( 'Your license needs to be checked before connecting. Please try again.', 'guest-key' ),
+				'licenseActive' => __( 'Your license is active.', 'guest-key' ), 'trialActive' => __( 'Your free trial is active.', 'guest-key' ),
+				'email' => __( 'Email address', 'guest-key' ), 'sendCode' => __( 'Email me a code', 'guest-key' ),
+				'code' => __( 'Six-digit email code', 'guest-key' ), 'verifyCode' => __( 'Verify & start trial', 'guest-key' ),
+				'codeSent' => __( 'We sent a six-digit code to %s. Your trial starts after verification.', 'guest-key' ),
+				'changeEmail' => __( 'Change email or request a new code', 'guest-key' ),
+				'licenseKey' => __( 'License key', 'guest-key' ), 'activateLicense' => __( 'Activate license', 'guest-key' ),
+				'buyLicense' => __( 'Get a license', 'guest-key' ), 'renewLicense' => __( 'Renew license', 'guest-key' ),
+				'checkLicense' => __( 'Check again', 'guest-key' ), 'removeLicense' => __( 'Remove license from this site', 'guest-key' ),
+				'continueConnect' => __( 'Connect agent', 'guest-key' ), 'working' => __( 'Working…', 'guest-key' ),
 			),
 		) );
 	}
@@ -132,7 +175,7 @@ final class Guest_Key_Admin {
 			<section class="guest-key-card guest-key-connect" aria-labelledby="guest-key-connect-title">
 					<h2 id="guest-key-connect-title"><?php esc_html_e( 'Connect your agent', 'guest-key' ); ?></h2>
 					<p class="guest-key-intro"><?php esc_html_e( 'Create connection details, then paste them into your local agent.', 'guest-key' ); ?></p>
-					<p><?php esc_html_e( 'Your agent receives administrator access to this site for six hours. You can revoke access at any time.', 'guest-key' ); ?></p>
+					<p><?php echo esc_html( sprintf( __( 'Your agent receives administrator access to this site for up to %s. You can revoke access at any time.', 'guest-key' ), self::duration_label() ) ); ?></p>
 					<p id="guest-key-grant-status" role="status" aria-live="polite"><?php echo $active ? esc_html( sprintf( __( 'Active until %s', 'guest-key' ), wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ) . ' T', $grant['expires'] ) ) ) : esc_html__( 'No active access on this site.', 'guest-key' ); ?></p>
 					<?php if ( Guest_Key_Browser::is_guest_session() ) : ?>
 						<p class="description"><?php esc_html_e( 'You are using a temporary Guest Key browser session. Sign out when finished. This session cannot issue replacement keys.', 'guest-key' ); ?></p>
@@ -142,6 +185,29 @@ final class Guest_Key_Admin {
 						<?php if ( ! $available ) : ?><p class="description"><?php esc_html_e( 'Application passwords are unavailable for this account. Check HTTPS and your host or security plugin settings.', 'guest-key' ); ?></p><?php endif; ?>
 						<p class="description"><?php esc_html_e( 'Creating access replaces your previous Guest Key. Revoking access ends the connection; changes already made remain.', 'guest-key' ); ?></p>
 					<?php endif; ?>
+			</section>
+			<?php if ( ! Guest_Key_Browser::is_guest_session() ) : ?>
+			<section class="guest-key-card guest-key-connect" id="guest-key-duration-settings" aria-labelledby="guest-key-duration-title">
+				<h2 id="guest-key-duration-title"><?php esc_html_e( 'Access duration', 'guest-key' ); ?></h2>
+				<?php if ( 'saved' === ( $_GET['guest-key-duration'] ?? '' ) ) : ?>
+					<div class="notice notice-success inline"><p><?php esc_html_e( 'Access duration saved.', 'guest-key' ); ?></p></div>
+				<?php elseif ( 'invalid' === ( $_GET['guest-key-duration'] ?? '' ) ) : ?>
+					<div class="notice notice-error inline"><p><?php esc_html_e( 'Enter a whole number of minutes from 30 to 1440 (24 hours). Your previous setting has been kept.', 'guest-key' ); ?></p></div>
+				<?php endif; ?>
+				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+					<input type="hidden" name="action" value="guest_key_save_duration">
+					<?php wp_nonce_field( 'guest_key_duration' ); ?>
+					<p><label for="guest-key-duration-minutes"><?php esc_html_e( 'Duration in minutes', 'guest-key' ); ?></label></p>
+					<input type="number" class="small-text" id="guest-key-duration-minutes" name="guest_key_duration_minutes" min="30" max="1440" step="1" required value="<?php echo esc_attr( Guest_Key_Access::duration() / MINUTE_IN_SECONDS ); ?>" aria-describedby="guest-key-duration-help">
+					<p class="description" id="guest-key-duration-help"><?php esc_html_e( '30 minutes to 24 hours. Default: 120 minutes (2 hours). Applies to new keys; existing keys keep their current expiration. Access always ends by your trial or license expiration.', 'guest-key' ); ?></p>
+					<?php submit_button( __( 'Save duration', 'guest-key' ), 'primary', 'submit', false ); ?>
+				</form>
+			</section>
+			<?php endif; ?>
+			<section class="guest-key-card guest-key-connect" id="guest-key-license-settings" aria-labelledby="guest-key-license-settings-title">
+				<h2 id="guest-key-license-settings-title"><?php esc_html_e( 'License & trial', 'guest-key' ); ?></h2>
+				<p><?php esc_html_e( 'Manage your trial or license. To change a saved license, remove it first, then enter your replacement key.', 'guest-key' ); ?></p>
+				<button type="button" class="button" data-guest-key-license-settings><?php esc_html_e( 'Manage license', 'guest-key' ); ?></button>
 			</section>
 			<details class="guest-key-details">
 				<summary><?php esc_html_e( 'Connection details', 'guest-key' ); ?></summary>

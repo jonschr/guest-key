@@ -145,10 +145,14 @@ try {
 	$assert( 0 === get_current_user_id(), 'An orphaned credential is rejected' );
 	update_user_meta( $uid, Guest_Key_Access::META, $grant );
 	$old_item = $item;
-	$old_item['created'] = time() - Guest_Key_Access::TTL;
+	$old_item['created'] = time() - 2 * HOUR_IN_SECONDS + MINUTE_IN_SECONDS;
 	$error = new WP_Error();
 	Guest_Key_Access::authenticate( $error, get_userdata( $uid ), $old_item );
-	$assert( 'guest_key_expired' === $error->get_error_code(), 'Native password creation time enforces the six-hour maximum' );
+	$assert( ! $error->has_errors(), 'Native passwords remain valid just inside the two-hour maximum' );
+	$old_item['created'] = time() - 2 * HOUR_IN_SECONDS;
+	$error = new WP_Error();
+	Guest_Key_Access::authenticate( $error, get_userdata( $uid ), $old_item );
+	$assert( 'guest_key_expired' === $error->get_error_code(), 'Native password creation time enforces the two-hour maximum' );
 	$regular = WP_Application_Passwords::create_new_application_password( $uid, array( 'name' => 'Unrelated regression password' ) );
 	$assert( ! is_wp_error( $regular ), 'Create an unrelated application password' );
 	$reset( $regular[0] );

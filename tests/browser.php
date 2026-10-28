@@ -23,7 +23,7 @@ $assert = static function ( $ok, $message ) use ( &$checks ) {
 $http = static function ( $url, $method = 'GET', $body = array(), $cookies = array(), $headers = array() ) use ( &$requests ) {
 	$requests++;
 	$response = wp_remote_request( $url, array( 'method' => $method, 'body' => $body, 'cookies' => $cookies, 'headers' => $headers, 'redirection' => 0, 'sslverify' => false, 'timeout' => 10,
-		'user-agent' => 'T3Code/0.0.46-nightly.20261005.2689 (user-directed AI agent; agent=Codex; model=gpt-6.1-sol) GuestKey/' . GUEST_KEY_VERSION . ' WordPress/' . get_bloginfo( 'version' ) ) );
+		'user-agent' => 'T3Code (user-directed AI agent; agent=Codex; model=gpt-6.1-sol) GuestKey/' . GUEST_KEY_VERSION . ' WordPress/' . get_bloginfo( 'version' ) ) );
 	if ( is_wp_error( $response ) ) { throw new RuntimeException( $response->get_error_message() ); }
 	if ( 429 === wp_remote_retrieve_response_code( $response ) ) { throw new RuntimeException( 'HTTP throttled; stop testing.' ); }
 	return $response;
@@ -76,6 +76,10 @@ try {
 	if ( ! preg_match( '/"nonce":"([^"]+)"/', $html, $match ) ) { throw new RuntimeException( 'Admin nonce missing.' ); }
 	$response = $http( admin_url( 'admin-ajax.php' ), 'POST', array( 'action' => 'guest_key_create', 'nonce' => $match[1] ), $cookies );
 	$assert( 403 === wp_remote_retrieve_response_code( $response ), 'Temporary browser session cannot extend its access through AJAX' );
+	foreach ( array( 'status', 'email', 'verify', 'activate', 'remove' ) as $action ) {
+		$response = $http( admin_url( 'admin-ajax.php' ), 'POST', array( 'action' => 'guest_key_license_' . $action, 'nonce' => $match[1] ), $cookies );
+		$assert( 403 === wp_remote_retrieve_response_code( $response ), 'Temporary browser session cannot change licensing through ' . $action );
+	}
 
 	// PHP decodes Set-Cookie values before populating $_COOKIE on a real request.
 	foreach ( $cookies as $cookie ) { $_COOKIE[ $cookie->name ] = rawurldecode( $cookie->value ); }

@@ -16,10 +16,25 @@
 .guest-key-inventory-list li:last-child { border-bottom: 0; }
 .guest-key-inventory-list .button-link { text-align: left; overflow-wrap: anywhere; }
 .guest-key-inventory-list .description { text-align: right; overflow-wrap: anywhere; }
-.guest-key-toast[hidden], .guest-key-page [hidden] { display: none; }
-.guest-key-toast { position: fixed; z-index: 100100; bottom: 24px; right: 24px; max-width: min(520px, calc(100vw - 48px)); box-sizing: border-box; padding: 16px 20px; background: #1d2327; color: #fff; border-left: 4px solid #00a32a; border-radius: 4px; box-shadow: 0 4px 20px #0003; font: 14px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+.guest-key-license-notice[hidden], .guest-key-toast[hidden], .guest-key-page [hidden] { display: none; }
+.guest-key-toast { position: fixed; z-index: 100100; width: 380px; max-width: calc(100vw - 16px); overflow: auto; box-sizing: border-box; padding: 16px 20px; background: #1d2327; color: #fff; border-left: 4px solid #00a32a; border-radius: 4px; box-shadow: 0 4px 20px #0003; font: 14px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
 .guest-key-toast.guest-key-error { border-left-color: #d63638; }
 .guest-key-toast button { display: block; margin-top: 10px; padding: 4px 0; background: none; border: none; color: #8ed1fc; cursor: pointer; font: inherit; text-decoration: underline; }
+.guest-key-license-notice { position: fixed; z-index: 100100; width: 380px; max-width: calc(100vw - 16px); box-sizing: border-box; padding: 20px; overflow: auto; background: #fff; color: #1d2327; border: 1px solid #c3c4c7; border-top: 3px solid #2271b1; border-radius: 0 0 4px 4px; box-shadow: 0 6px 20px #0003; font: 14px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+.guest-key-license-notice button { display: block; margin-top: 10px; padding: 4px 0; background: none; border: none; color: #2271b1; cursor: pointer; font: inherit; text-decoration: underline; }
+#wpadminbar #wp-admin-bar-guest-key-access.guest-key-panel-open .ab-sub-wrapper { display: none; }
+.guest-key-license-notice strong { display: block; padding-right: 52px; font-size: 17px; }
+.guest-key-license-notice p { margin: 10px 0; color: inherit; font: inherit; }
+.guest-key-license-notice form { margin: 16px 0; }
+.guest-key-license-notice label { display: block; color: inherit; font: inherit; }
+.guest-key-license-notice input { display: block; box-sizing: border-box; width: 100%; min-height: 44px; margin-top: 5px; padding: 8px 10px; border: 1px solid #8c8f94; border-radius: 3px; background: #fff; color: #1d2327; font: inherit; font-size: 16px; }
+.guest-key-license-notice form button { width: 100%; min-height: 44px; padding: 8px 12px; border: 1px solid #72aee6; border-radius: 3px; background: #2271b1; color: #fff; text-decoration: none; }
+.guest-key-license-notice .guest-key-license-close { position: absolute; top: 12px; right: 16px; margin: 0; }
+.guest-key-license-notice a { display: inline-block; margin: 12px 16px 0 0; color: #2271b1; text-decoration: underline; }
+.guest-key-license-notice button:focus-visible, .guest-key-license-notice a:focus-visible { outline: 2px solid #2271b1; outline-offset: 3px; }
+.guest-key-license-notice input:focus-visible { outline: 2px solid #72aee6; outline-offset: 2px; }
+.guest-key-license-notice button:disabled { opacity: .65; cursor: wait; }
+.guest-key-license-feedback:empty { display: none; }
 .guest-key-dialog { max-width: 620px; width: calc(100vw - 80px); padding: 24px; border: 1px solid #c3c4c7; border-radius: 6px; background: #fff; color: #1d2327; font: 14px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
 .guest-key-dialog::backdrop { background: #0007; }
 .guest-key-dialog h2 { margin-top: 0; font-size: 20px; }

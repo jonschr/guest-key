@@ -5,7 +5,10 @@ final class Guest_Key_Access {
 
 	const APP_ID = '8bc1d546-6f74-4f3a-91a3-6ed7ed9fc551';
 	const META = '_guest_key_access';
-	const TTL = 6 * HOUR_IN_SECONDS;
+	const TTL = 2 * HOUR_IN_SECONDS;
+	const MIN_TTL = 30 * MINUTE_IN_SECONDS;
+	const MAX_TTL = DAY_IN_SECONDS;
+	const DURATION_OPTION = 'guest_key_duration_minutes';
 	const ROUTE = '/guest-key/v1/mcp';
 	const CRON = 'guest_key_expire';
 	private static $authenticated_user_id = 0;
@@ -29,6 +32,32 @@ final class Guest_Key_Access {
 		$user = get_userdata( $user_id );
 		return $user && in_array( 'administrator', $user->roles, true )
 			&& user_can( $user, 'manage_options' ) && ( ! is_multisite() || is_super_admin( $user_id ) );
+	}
+
+	private static function valid_minutes( $value ) {
+		if ( ( ! is_int( $value ) && ! is_string( $value ) ) || ! preg_match( '/^[0-9]{1,4}$/', (string) $value ) ) { return false; }
+		$value = (int) $value;
+		return $value >= 30 && $value <= 1440 ? $value : false;
+	}
+
+	public static function duration() {
+		$minutes = self::valid_minutes( get_option( self::DURATION_OPTION, self::TTL / MINUTE_IN_SECONDS ) );
+		return false === $minutes ? self::TTL : $minutes * MINUTE_IN_SECONDS;
+	}
+
+	public static function set_duration( $minutes ) {
+		if ( Guest_Key_Browser::is_guest_session() || ! self::administrator() ) { return new WP_Error( 'guest_key_forbidden', __( 'Only an administrator may change the access duration.', 'guest-key' ) ); }
+		$minutes = self::valid_minutes( $minutes );
+		if ( false === $minutes ) { return new WP_Error( 'guest_key_duration', __( 'Enter a whole number of minutes from 30 to 1440 (24 hours).', 'guest-key' ) ); }
+		update_option( self::DURATION_OPTION, $minutes, false );
+		return true;
+	}
+
+	/** Snapshot the duration when issuing access; settings changes must not extend existing keys. */
+	public static function grant_ttl( $grant ) {
+		if ( ! array_key_exists( 'ttl', $grant ) ) { return self::TTL; }
+		$ttl = $grant['ttl'];
+		return is_int( $ttl ) && $ttl >= self::MIN_TTL && $ttl <= self::MAX_TTL ? $ttl : 0;
 	}
 
 	public static function endpoint() {
@@ -99,6 +128,8 @@ final class Guest_Key_Access {
 			return new WP_Error( 'guest_key_passwords_disabled', __( 'Application passwords are unavailable. Use HTTPS and check your site’s application-password policy.', 'guest-key' ) );
 		}
 		return self::locked( $user_id, static function () use ( $user_id ) {
+			$licensed = Guest_Key_License::require_access();
+			if ( is_wp_error( $licensed ) ) { return $licensed; }
 			// Revoke all passwords with our app identifier, including any orphan from an interrupted request.
 			$old = self::grant( $user_id );
 			$revoked = self::remove_passwords( $user_id );
@@ -117,7 +148,8 @@ final class Guest_Key_Access {
 				return $created;
 			}
 			list( $password, $item ) = $created;
-			$grant = array( 'uuid' => $item['uuid'], 'expires' => $item['created'] + self::TTL, 'blog_id' => get_current_blog_id(), 'network_id' => get_current_network_id() );
+			$ttl = self::duration();
+			$grant = array( 'uuid' => $item['uuid'], 'ttl' => $ttl, 'expires' => min( $item['created'] + $ttl, Guest_Key_License::active_until() ), 'blog_id' => get_current_blog_id(), 'network_id' => get_current_network_id() );
 			if ( ! update_user_meta( $user_id, self::META, $grant ) ) {
 				WP_Application_Passwords::delete_application_password( $user_id, $item['uuid'] );
 				return new WP_Error( 'guest_key_storage', __( 'Could not save temporary access. No credential was issued.', 'guest-key' ) );
@@ -235,7 +267,11 @@ final class Guest_Key_Access {
 			return;
 		}
 		$grant = self::grant( $user->ID );
-		if ( ! isset( $grant['uuid'], $grant['expires'], $grant['blog_id'], $grant['network_id'] ) || $grant['uuid'] !== $item['uuid'] || $grant['expires'] <= time() || $item['created'] + self::TTL <= time() ) {
+		if ( ! Guest_Key_License::active_until() ) {
+			$error->add( 'guest_key_license_required', __( 'The Guest Key trial or license has expired.', 'guest-key' ) );
+			return;
+		}
+		if ( ! isset( $grant['uuid'], $grant['expires'], $grant['blog_id'], $grant['network_id'] ) || $grant['uuid'] !== $item['uuid'] || $grant['expires'] <= time() || ! self::grant_ttl( $grant ) || $item['created'] + self::grant_ttl( $grant ) <= time() ) {
 			$error->add( 'guest_key_expired', __( 'Guest Key access has expired or been revoked.', 'guest-key' ) );
 			return;
 		}
@@ -280,12 +316,12 @@ final class Guest_Key_Access {
 	public static function can_connect() {
 		// Authorization belongs here, where WordPress has established the current user.
 		$grant = self::grant( get_current_user_id() );
-		return self::administrator() && $grant && $grant['expires'] > time()
+		return self::administrator() && Guest_Key_License::active_until() && $grant && $grant['expires'] > time()
 			&& (int) $grant['blog_id'] === get_current_blog_id()
 			&& $grant['uuid'] === rest_get_authenticated_app_password();
 	}
 
-	private static function browser_request() {
+	public static function browser_request() {
 		check_ajax_referer( 'guest_key_access', 'nonce' );
 		if ( Guest_Key_Browser::is_guest_session() || ! self::administrator() || ! wp_get_session_token() || rest_get_authenticated_app_password() ) {
 			wp_send_json_error( array( 'message' => __( 'Use an administrator’s logged-in browser session to manage access.', 'guest-key' ) ), 403 );
@@ -297,7 +333,7 @@ final class Guest_Key_Access {
 		self::browser_request();
 		$result = self::create( get_current_user_id() );
 		if ( is_wp_error( $result ) ) {
-			wp_send_json_error( array( 'message' => $result->get_error_message() ), 400 );
+			wp_send_json_error( array( 'message' => $result->get_error_message(), 'licensing' => 'guest_key_license_required' === $result->get_error_code() ? Guest_Key_License::view() : null ), 400 );
 		}
 		wp_send_json_success( $result );
 	}
@@ -313,6 +349,7 @@ final class Guest_Key_Access {
 	}
 
 	public static function deactivate( $network_wide = false ) {
+		wp_clear_scheduled_hook( 'guest_key_license_refresh' );
 		foreach ( self::grants() as $user_id => $grant ) {
 			if ( $network_wide || (int) $grant['blog_id'] === get_current_blog_id() ) {
 				$result = self::revoke( $user_id, $grant['uuid'] );

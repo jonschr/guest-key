@@ -1,2 +1,4 @@
 /tests export-ignore
 /.gitattributes export-ignore
+
+/TESTING-LICENSING.md export-ignore

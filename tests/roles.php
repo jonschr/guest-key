@@ -40,7 +40,7 @@ try {
 		new WP_Http_Cookie( array( 'name' => LOGGED_IN_COOKIE, 'value' => $login_cookie, 'path' => '/' ) ),
 		new WP_Http_Cookie( array( 'name' => SECURE_AUTH_COOKIE, 'value' => wp_generate_auth_cookie( $uid, time() + HOUR_IN_SECONDS, 'secure_auth', $token ), 'path' => '/' ) ),
 	);
-	foreach ( array( 'guest_key_create', 'guest_key_revoke', 'guest_key_diagnostics' ) as $action ) {
+	foreach ( array( 'guest_key_create', 'guest_key_revoke', 'guest_key_diagnostics', 'guest_key_license_status', 'guest_key_license_email', 'guest_key_license_verify', 'guest_key_license_activate', 'guest_key_license_remove' ) as $action ) {
 		$requests++;
 		$response = wp_remote_post( admin_url( 'admin-ajax.php' ), array( 'body' => array( 'action' => $action, 'nonce' => wp_create_nonce( 'guest_key_access' ) ), 'cookies' => $http_cookies, 'sslverify' => false, 'redirection' => 0, 'timeout' => 15, 'user-agent' => 'T3Code/0.0.46-nightly.20261005.2689 (user-directed AI agent; agent=Codex; model=gpt-6.1-sol)' ) );
 		if ( is_wp_error( $response ) ) { throw new RuntimeException( $response->get_error_message() ); }

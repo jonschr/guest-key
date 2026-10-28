@@ -73,7 +73,7 @@ try {
 	$first = Guest_Key_Access::create( $uid );
 	guest_key_assert( ! is_wp_error( $first ), 'Issue temporary access' );
 	$first_grant = Guest_Key_Access::grant( $uid );
-	guest_key_assert( abs( $first_grant['expires'] - time() - 21600 ) <= 2, 'Credential expires after six hours' );
+	guest_key_assert( abs( $first_grant['expires'] - time() - 7200 ) <= 2, 'Credential expires after two hours' );
 	guest_key_assert( false !== wp_next_scheduled( Guest_Key_Access::CRON, array( $uid, $first_grant['uuid'] ) ), 'Schedule cleanup for the issued UUID' );
 	$second = Guest_Key_Access::create( $uid );
 	guest_key_assert( ! is_wp_error( $second ) && $first['password'] !== $second['password'], 'A second click creates a fresh credential' );

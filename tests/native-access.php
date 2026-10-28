@@ -23,7 +23,7 @@ try {
 	$assert( false === $key['mcp']['ready'] && null === $key['endpoint'] && 'guest_key_install_denied' === $key['mcp']['error']['code'], 'MCP readiness and setup error are reported separately' );
 	$assert( false !== strpos( $key['bundle'], 'Optional MCP unavailable:' ) && false !== strpos( $key['bundle'], 'Native REST commands and browser sign-in are ready.' ), 'Connection bundle gives working native paths instead of an unavailable MCP endpoint' );
 	$grant = Guest_Key_Access::grant( $uid );
-	$assert( $grant['expires'] > time() && $grant['expires'] <= time() + Guest_Key_Access::TTL, 'Native-only grants retain the six-hour expiry' );
+	$assert( abs( $grant['expires'] - time() - 7200 ) <= 2, 'Native-only grants expire after two hours' );
 	$headers = array( 'Authorization' => 'Basic ' . base64_encode( $key['username'] . ':' . $key['password'] ) );
 	$r = wp_remote_get( rest_url( 'wp/v2/users/me' ), array( 'headers' => $headers, 'sslverify' => false, 'timeout' => 20, 'user-agent' => 'GuestKey/' . GUEST_KEY_VERSION . ' (native access regression test)' ) );
 	$assert( ! is_wp_error( $r ) && 200 === wp_remote_retrieve_response_code( $r ) && $uid === json_decode( wp_remote_retrieve_body( $r ), true )['id'], 'Credential issued after MCP failure authenticates to ordinary REST over HTTP' );
