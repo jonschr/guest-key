@@ -104,6 +104,8 @@ final class Guest_Key_Admin {
 				'codeSent' => __( 'We sent a six-digit code to %s. Your trial starts after verification.', 'guest-key' ),
 				'changeEmail' => __( 'Change email or request a new code', 'guest-key' ),
 				'licenseKey' => __( 'License key', 'guest-key' ), 'activateLicense' => __( 'Activate license', 'guest-key' ),
+				'showKey' => __( 'Show key', 'guest-key' ), 'hideKey' => __( 'Hide key', 'guest-key' ),
+				'showKeyHelp' => __( 'Show the key to enter it using TextExpander.', 'guest-key' ),
 				'buyLicense' => __( 'Get a license', 'guest-key' ), 'renewLicense' => __( 'Renew license', 'guest-key' ),
 				'checkLicense' => __( 'Check again', 'guest-key' ), 'removeLicense' => __( 'Remove license from this site', 'guest-key' ),
 				'continueConnect' => __( 'Connect agent', 'guest-key' ), 'working' => __( 'Working…', 'guest-key' ),

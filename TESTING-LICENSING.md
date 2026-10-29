@@ -1,3 +1,7 @@
+# License entry — 0.2.3
+
+Show/Hide key keeps password entry by default and replaces the input when toggling, because Chrome retains password-history flags. CSS masking was rejected after checking Chromium Secure Input handling. Chrome verified password entry by default, unmasked text entry after Show key, focus transfer, repeated Show/Hide toggles preserving the entered value, and disabled autocomplete and text corrections. Settings-page 18 and licensing 29 regression checks passed. Screenshot 54 records the masked default. Native TextExpander expansion remains pending an uninterrupted foreground Chrome session. No licensing/provider logic changed.
+
 # Toolbar/settings verification — 0.2.2
 
 106 checks passed: settings page 18, roles 41, licensing 29 and automatic licensing 18. Chrome on the isolated QA site verified a real perpetual owner-license activation, status check and instance removal; the licensed toolbar contains only the native Settings link and its target opens the settings page. QA-only provider fixtures covered active and expired trial settings, expired-trial activation, immediate post-activation keyboard focus, and clearing all license-entry fields from the closed setup panel. Screenshots 49–52 record these states. Licensing/provider logic is unchanged; no connector deployment is required.

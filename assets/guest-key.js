@@ -156,11 +156,13 @@
 		}
 		function form(label, type, submit, callback) {
 			const form = document.createElement('form'); const fieldLabel = document.createElement('label'); fieldLabel.textContent = label;
-			const input = document.createElement('input'); input.type = type; input.required = true; input.setAttribute('aria-label', label);
+			let input = document.createElement('input'); input.type = type; input.required = true; input.setAttribute('aria-label', label);
 			input.autocomplete = type === 'email' ? 'email' : type === 'text' ? 'one-time-code' : 'off';
 			if (type === 'text') { input.inputMode = 'numeric'; input.pattern = '[0-9]{6}'; input.maxLength = 6; }
 			if (type === 'email') input.value = licensing?.email || '';
-			if (type === 'password') { input.maxLength = 200; input.spellcheck = false; }
+			if (type === 'password') {
+				input.maxLength = 200; input.spellcheck = false; input.autocapitalize = 'off'; input.setAttribute('autocorrect', 'off');
+			}
 			if (licenseSettings) { input.className = 'regular-text'; fieldLabel.append(document.createElement('br')); }
 			fieldLabel.append(input);
 			const button = document.createElement('button'); button.type = 'submit'; button.textContent = submit;
@@ -169,6 +171,22 @@
 				const fieldRow = document.createElement('p'); fieldRow.append(fieldLabel);
 				const submitRow = document.createElement('p'); submitRow.append(button); form.append(fieldRow, submitRow);
 			} else form.append(fieldLabel, button);
+			if (type === 'password') {
+				const reveal = document.createElement('button'); reveal.type = 'button'; reveal.textContent = s.showKey;
+				reveal.setAttribute('aria-pressed', 'false'); reveal.title = s.showKeyHelp;
+				if (licenseSettings) reveal.className = 'button';
+				reveal.addEventListener('click', () => {
+					const show = input.type === 'password';
+					// Chrome remembers password fields; a fresh text input lets TextExpander work.
+					const replacement = document.createElement('input');
+					for (const attribute of input.attributes) if (attribute.name !== 'type') replacement.setAttribute(attribute.name, attribute.value);
+					replacement.type = show ? 'text' : 'password'; replacement.value = input.value;
+					input.replaceWith(replacement); input = replacement;
+					reveal.textContent = show ? s.hideKey : s.showKey; reveal.setAttribute('aria-pressed', String(show));
+					input.focus(); input.setSelectionRange(input.value.length, input.value.length);
+				});
+				fieldLabel.after(document.createTextNode(' '), reveal);
+			}
 			form.addEventListener('submit', event => { event.preventDefault(); run(() => callback(input.value)); }); licensePanel.append(form); return input;
 		}
 		let focus;
