@@ -127,9 +127,11 @@ final class Guest_Key_Access {
 		if ( ! wp_is_application_passwords_available_for_user( get_userdata( $user_id ) ) ) {
 			return new WP_Error( 'guest_key_passwords_disabled', __( 'Application passwords are unavailable. Use HTTPS and check your site’s application-password policy.', 'guest-key' ) );
 		}
+		// License refresh takes the same global lock; finish it before credential rotation.
+		$licensed = Guest_Key_License::require_access( $user_id );
+		if ( is_wp_error( $licensed ) ) { return $licensed; }
 		return self::locked( $user_id, static function () use ( $user_id ) {
-			$licensed = Guest_Key_License::require_access();
-			if ( is_wp_error( $licensed ) ) { return $licensed; }
+			if ( ! Guest_Key_License::active_until( $user_id ) ) { return new WP_Error( 'guest_key_license_required', __( 'Your Guest Key entitlement ended before access could be created. Check your license and retry.', 'guest-key' ) ); }
 			// Revoke all passwords with our app identifier, including any orphan from an interrupted request.
 			$old = self::grant( $user_id );
 			$revoked = self::remove_passwords( $user_id );
@@ -149,7 +151,7 @@ final class Guest_Key_Access {
 			}
 			list( $password, $item ) = $created;
 			$ttl = self::duration();
-			$grant = array( 'uuid' => $item['uuid'], 'ttl' => $ttl, 'expires' => min( $item['created'] + $ttl, Guest_Key_License::active_until() ), 'blog_id' => get_current_blog_id(), 'network_id' => get_current_network_id() );
+			$grant = array( 'uuid' => $item['uuid'], 'ttl' => $ttl, 'expires' => min( $item['created'] + $ttl, Guest_Key_License::active_until( $user_id ) ), 'blog_id' => get_current_blog_id(), 'network_id' => get_current_network_id() );
 			if ( ! update_user_meta( $user_id, self::META, $grant ) ) {
 				WP_Application_Passwords::delete_application_password( $user_id, $item['uuid'] );
 				return new WP_Error( 'guest_key_storage', __( 'Could not save temporary access. No credential was issued.', 'guest-key' ) );
@@ -186,14 +188,20 @@ final class Guest_Key_Access {
 				'expires_label' => wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ) . ' T', $grant['expires'] ),
 				'bundle' => implode( "\n", array(
 					'WordPress REST API (HTTP Basic): ' . rest_url(),
-					'Commands: GET ' . rest_url( 'guest-key/v1/help' ) . ' for names/schema (?command=post%20save); POST ' . rest_url( 'guest-key/v1/run' ) . ' with {"commands":[{"command":"plugin install","input":{"slug":"example","activate":true}}]}. Batches stop on failure; check ok/results/error before retrying. Use file list/read/search to inspect wp-content source. Before design work, run design guide for the workflow and topic index.',
 					'Username: ' . $user->user_login,
 					'Application password: ' . $password,
 					'Expires: ' . $expires,
-					'For all programmatic HTTP and MCP requests, including discovery, retries and diagnostics, send User-Agent: <client>/<version> (user-directed AI agent; agent=<agent>; model=<model>). Use your actual client/version, agent and model; omit unknown fields or /version rather than inventing values. Keep the phrase "user-directed AI agent" and reuse the same identifier throughout the session.',
-					'Example only: User-Agent: T3Code/0.0.46-nightly.20261005.2689 (user-directed AI agent; agent=Codex; model=gpt-6.1-sol). In T3 Code, resolve serverVersion from t3_environment_read and agent/model from t3_thread_configuration (modelSelection.instanceId and modelSelection.model), or authoritative runtime information. Use readable agent names such as Codex.',
-					'Set the actual header using supported HTTP-client or MCP-transport controls; configure downstream HTTP requests separately where supported. Keep interactive browser user agents unchanged. If headers cannot be configured, continue and report that limitation; do not claim the identifier was sent.',
-					'Browser sign-in (same credentials): ' . Guest_Key_Browser::url(),
+					'',
+					'Thread title: If your tool can rename this thread or conversation, name it "' . ( trim( wp_strip_all_tags( wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES ), true ) ) ?: wp_parse_url( home_url( '/' ), PHP_URL_HOST ) ) . ' edits". Otherwise, suggest this title to the user and continue.',
+					'Use HTTP Basic authentication with these credentials for each HTTPS request, using any request tool available to you. If none supports authentication, tell the user. Keep credentials out of source files and logs.',
+					'1. Discover commands: GET ' . rest_url( 'guest-key/v1/help' ),
+					'2. Read a command schema before using it: GET ' . add_query_arg( 'command', 'post list', rest_url( 'guest-key/v1/help' ) ),
+					'3. Run commands: POST ' . rest_url( 'guest-key/v1/run' ) . ' with Content-Type: application/json. Read-only example: {"commands":[{"command":"post list","input":{"post_type":"any"}}]}',
+					'Command names are JSON values, not shell commands. Check ok, results, and error before continuing. A failed batch stops at that command; earlier changes may already be saved, so do not blindly repeat the batch.',
+					'For design tasks, use the "design guide" command first. For source context, use "file list", "file read", and "file search"; direct file editing, shell access, and SQL are not provided.',
+					'',
+					'Optional request identification, if your tool supports custom headers: User-Agent: <client>/<version> (user-directed AI agent; agent=<agent>; model=<model>). Use actual values and omit unknown fields or /version. Keep interactive browser user agents unchanged. If custom headers are unavailable, continue without this header.',
+					'Optional browser sign-in (same credentials): ' . Guest_Key_Browser::url(),
 					$mcp['ready'] ? 'Optional MCP endpoint (Streamable HTTP, same HTTP Basic credentials): ' . self::endpoint() : 'Optional MCP unavailable: ' . $mcp['error']['message'] . ' Native REST commands and browser sign-in are ready.',
 				) ),
 			);
@@ -267,10 +275,6 @@ final class Guest_Key_Access {
 			return;
 		}
 		$grant = self::grant( $user->ID );
-		if ( ! Guest_Key_License::active_until() ) {
-			$error->add( 'guest_key_license_required', __( 'The Guest Key trial or license has expired.', 'guest-key' ) );
-			return;
-		}
 		if ( ! isset( $grant['uuid'], $grant['expires'], $grant['blog_id'], $grant['network_id'] ) || $grant['uuid'] !== $item['uuid'] || $grant['expires'] <= time() || ! self::grant_ttl( $grant ) || $item['created'] + self::grant_ttl( $grant ) <= time() ) {
 			$error->add( 'guest_key_expired', __( 'Guest Key access has expired or been revoked.', 'guest-key' ) );
 			return;
@@ -281,6 +285,10 @@ final class Guest_Key_Access {
 		// retains its own normal application-password API request detection.
 		if ( (int) $grant['blog_id'] !== get_current_blog_id() || (int) $grant['network_id'] !== get_current_network_id() ) {
 			$error->add( 'guest_key_scope', __( 'This credential is restricted to its issuing site.', 'guest-key' ) );
+			return;
+		}
+		if ( ! Guest_Key_License::active_until( $user->ID ) ) {
+			$error->add( 'guest_key_license_required', __( 'The Guest Key trial or license has expired.', 'guest-key' ) );
 		}
 	}
 

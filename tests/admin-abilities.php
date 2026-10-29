@@ -1,7 +1,9 @@
 <?php
+require_once __DIR__ . '/user-license-fixture.php';
 /**
  * Local integration test. Install admin-fixture.php as a temporary MU plugin and
- * provide wp-content/uploads/guest-key-admin-test.zip containing a harmless test plugin.
+ * provide wp-content/uploads/guest-key-admin-test.zip with package-fixture.php
+ * stored as guest-key-admin-test/guest-key-admin-test.php.
  * Run with wp --user=admin eval-file tests/admin-abilities.php. Remove the fixture/ZIP afterward.
  */
 if ( ! defined( 'WP_CLI' ) || ! WP_CLI || ! in_array( wp_get_environment_type(), array( 'local', 'development' ), true ) || ! Guest_Key_Access::administrator() || ! post_type_exists( 'guest_key_test' ) ) {
@@ -38,7 +40,7 @@ $http = static function ( $body, $credential, $session = '' ) use ( &$requests )
 };
 try {
 	wp_set_current_user( $uid );
-	$credential = Guest_Key_Access::create( $uid );
+	$credential = guest_key_test_entitled_create( $uid );
 	if ( is_wp_error( $credential ) ) { throw new RuntimeException( $credential->get_error_message() ); }
 	$init = $http( array( 'jsonrpc' => '2.0', 'id' => 1, 'method' => 'initialize', 'params' => array( 'protocolVersion' => '2025-11-25', 'capabilities' => new stdClass(), 'clientInfo' => array( 'name' => 'Guest Key admin tests', 'version' => '1.0' ) ) ), $credential );
 	$session = $init['session'];

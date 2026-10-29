@@ -99,10 +99,10 @@
 		clearTimeout(dismissTimer);
 		if (notice) notice.hidden = true;
 		licensePanel = licenseSettings;
-		licensePanel.closest('#guest-key-license-settings').classList.toggle('guest-key-license-attention', licensing?.kind !== 'paid' || !licensing.active);
+		licensePanel.closest('#guest-key-license-settings').classList.toggle('guest-key-license-attention', !licensing?.active);
 
 		if (message === s.codeSent) message = s.codeSent.replace('%s', licensing.email);
-		const title = licensing?.kind === 'paid' ? s.licenseSettings : licensing?.active ? s.trialTitle : s.licenseTitle;
+		const title = licensing?.kind === 'paid' || licensing?.kind === 'shared' ? s.licenseSettings : licensing?.active ? s.trialTitle : s.licenseTitle;
 		licensePanel.removeAttribute('aria-live');
 		const heading = document.createElement('h2'); heading.textContent = title;
 		heading.id = 'guest-key-license-settings-title';
@@ -110,6 +110,7 @@
 		intro.textContent = licensing?.active ? (licensing.kind === 'paid' ? s.licenseActive : s.trialActive)
 			: licensing?.kind === 'paid' ? (licensing.expired ? s.licenseExpired : s.licenseCheckNeeded)
 				: licensing?.expired ? (licensing.email ? s.trialExpiredEmail.replace('%s', licensing.email) : s.trialExpired) : s.trialIntro;
+		if (licensing?.sharedBy?.length && !licensing.ownActive) intro.textContent = s.sharedAccess.replace('%s', licensing.sharedBy.join(', '));
 		const feedback = document.createElement('p'); feedback.className = 'guest-key-license-feedback';
 		feedback.setAttribute('role', 'status'); feedback.setAttribute('aria-live', 'polite'); feedback.textContent = message === intro.textContent ? '' : message;
 		licensePanel.replaceChildren(heading, intro, feedback);
@@ -168,7 +169,29 @@
 			const input = form(s.licenseKey, 'text', s.activateLicense, async key => { await request('guest_key_license_activate', {key}); licenseNotice(s.licenseActive); }, keyColumn);
 			focus ||= input;
 		}
-		const checkout = document.createElement('a'); checkout.textContent = licensing?.kind === 'paid' ? (licensing.active ? s.manageBilling : s.renewLicense) : s.buyLicense;
+		if (licensing?.kind === 'paid' && licensing.administrators?.length) {
+			const fieldset = document.createElement('fieldset');
+			const legend = document.createElement('legend'); legend.textContent = s.shareLicense;
+			const description = document.createElement('p'); description.textContent = s.shareIntro;
+			fieldset.append(legend, description);
+			const choices = [];
+			licensing.administrators.forEach(admin => {
+				const label = document.createElement('label');
+				const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.value = admin.id; checkbox.checked = admin.shared;
+				choices.push(checkbox); label.append(checkbox, ' ', admin.name);
+				const row = document.createElement('p'); row.append(label); fieldset.append(row);
+			});
+			action(s.saveSharing, async () => {
+				const users = choices.filter(input => input.checked).map(input => Number(input.value));
+				await request('guest_key_license_share', {users: JSON.stringify(users)}); licenseNotice(s.sharingSaved, false, false);
+			}, fieldset);
+			licensePanel.append(fieldset);
+		}
+		if (licensing?.legacyClaim) {
+			const explanation = document.createElement('p'); explanation.textContent = s.claimIntro; licensePanel.append(explanation);
+			action(s.claimExisting, async () => { await request('guest_key_license_claim_existing'); licenseNotice(); });
+		}
+		const checkout = document.createElement('a'); checkout.textContent = licensing?.kind === 'paid' ? (licensing.ownActive ? s.manageBilling : s.renewLicense) : s.buyLicense;
 		checkout.href = licensing?.kind === 'paid' ? licensing.renew : licensing.checkout;
 		checkout.className = 'button';
 		if (licensing?.kind !== 'paid') {

@@ -58,7 +58,7 @@ final class Guest_Key_Browser {
 		$binding = $session[ self::SESSION ];
 		$grant = Guest_Key_Access::grant( $user_id );
 		$item = WP_Application_Passwords::get_user_application_password( $user_id, $binding['uuid'] ?? '' );
-		if ( ! Guest_Key_License::active_until() || ! $grant || ! $item || Guest_Key_Access::APP_ID !== ( $item['app_id'] ?? '' )
+		if ( ! Guest_Key_License::active_until( $user_id ) || ! $grant || ! $item || Guest_Key_Access::APP_ID !== ( $item['app_id'] ?? '' )
 			|| ( $binding['uuid'] ?? '' ) !== $grant['uuid'] || $grant['expires'] <= time()
 			|| ! Guest_Key_Access::grant_ttl( $grant ) || $item['created'] + Guest_Key_Access::grant_ttl( $grant ) <= time()
 			|| (int) $grant['blog_id'] !== get_current_blog_id()

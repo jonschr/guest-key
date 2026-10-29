@@ -3,6 +3,7 @@
 if ( ! defined( 'WP_CLI' ) || ! WP_CLI || is_multisite() || ! in_array( wp_get_environment_type(), array( 'local', 'development' ), true ) || ! Guest_Key_Access::administrator() ) {
 	throw new RuntimeException( 'Use WP-CLI as an administrator on a local/development single site with its web server running.' );
 }
+require_once __DIR__ . '/user-license-fixture.php';
 error_reporting( E_ALL & ~E_DEPRECATED );
 require_once ABSPATH . 'wp-admin/includes/plugin.php';
 $original_uid = get_current_user_id();
@@ -36,7 +37,7 @@ try {
 	$uid = wp_insert_user( array( 'user_login' => 'guest-key-rest-test-' . wp_generate_password( 10, false ), 'user_pass' => wp_generate_password( 32 ), 'role' => 'administrator' ) );
 	$assert( ! is_wp_error( $uid ), 'Create a temporary native REST administrator' );
 	wp_set_current_user( $uid );
-	$key = Guest_Key_Access::create( $uid );
+	$key = guest_key_test_entitled_create( $uid );
 	$assert( ! is_wp_error( $key ) && rest_url() === $key['rest_api'] && 0 === strpos( $key['bundle'], 'WordPress REST API (HTTP Basic): ' ), 'Copied connection instructions lead with native REST credentials' );
 	$assert( false !== strpos( $key['bundle'], 'Optional MCP endpoint' ) && strpos( $key['bundle'], 'WordPress REST API (HTTP Basic): ' ) < strpos( $key['bundle'], 'Optional MCP endpoint' ), 'MCP is an additional connection option' );
 	$response = $http( 'GET', 'wp/v2/users/me', $key, array( 'context' => 'edit' ) );
@@ -79,7 +80,7 @@ try {
 		$assert( 403 === $response['status'] && 'guest_key_forbidden' === $response['data']['code'], 'A demoted account cannot use its existing key on ' . $route );
 	}
 	get_userdata( $uid )->set_role( 'administrator' );
-	$key2 = Guest_Key_Access::create( $uid );
+	$key2 = guest_key_test_entitled_create( $uid );
 	$assert( ! is_wp_error( $key2 ), 'Issue a replacement temporary REST key' );
 	$response = $http( 'GET', 'wp/v2/users/me', $key );
 	$assert( 401 === $response['status'], 'Rotation ends the old key’s ordinary REST access' );

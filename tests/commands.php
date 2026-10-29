@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/user-license-fixture.php';
 /** wp --user=admin eval-file tests/commands.php; temporary content and credentials are removed. */
 if ( ! defined( 'WP_CLI' ) || ! WP_CLI || ! in_array( wp_get_environment_type(), array( 'local', 'development' ), true ) || ! Guest_Key_Access::administrator() ) {
 	throw new RuntimeException( 'Use WP-CLI as an administrator on a local/development site.' );
@@ -39,6 +40,9 @@ try {
 	register_post_meta( 'gk_command_portfolio', 'gk_denied', array( 'type' => 'string', 'auth_callback' => '__return_false' ) );
 	$help = wp_get_ability( 'guest-key/help' )->execute( array() );
 	$assert( in_array( 'post save', $help['commands'], true ) && ! isset( $help['input_schema'] ), 'Default help lists compact command names without full schemas' );
+	$assert( isset( $help['conventions']['parameters'], $help['conventions']['pagination'], $help['conventions']['output'] ) && false !== strpos( $help['conventions']['pagination'], 'next_cursor' ), 'Default help explains parameter meaning, file cursors and safe response sizing' );
+	$file_help = wp_get_ability( 'guest-key/help' )->execute( array( 'command' => 'file search' ) );
+	$assert( isset( $file_help['input_schema']['properties']['cursor'], $file_help['input_schema']['properties']['depth'] ) && false !== strpos( $file_help['description'], 'byte, entry or time limit' ), 'Focused search help exposes resumable budget limits and depth controls' );
 	$assert( isset( $help['post_types']['gk_command_portfolio'] ) && 'Command test portfolio' === $help['post_types']['gk_command_portfolio'], 'Default help includes the exact dynamically registered post type names and labels' );
 	$post_help = wp_get_ability( 'guest-key/help' )->execute( array( 'command' => 'post' ) );
 	$list_help = wp_get_ability( 'guest-key/help' )->execute( array( 'command' => 'post list' ) );
@@ -89,7 +93,7 @@ try {
 	$across = $run( array( array( 'command' => 'post list', 'input' => array( 'post_type' => 'any', 'search' => 'Command portfolio' ) ) ) );
 	$assert( $across['ok'] && in_array( $id, array_column( $across['results'][0]['data']['items'], 'id' ), true ), 'The command dispatcher supports cross-type search for a non-REST custom post' );
 	$unknown = $run( array( array( 'command' => 'post list', 'input' => array( 'post_type' => 'gk_unknown_type' ) ), array( 'command' => 'post describe' ) ) );
-	$assert( ! $unknown['ok'] && 0 === $unknown['failed_index'] && 1 === $unknown['skipped'] && false !== strpos( $unknown['error']['message'], 'post describe' ), 'Invalid types retain the batch failure contract and provide discovery guidance' );
+	$assert( ! $unknown['ok'] && 0 === $unknown['failed_index'] && 1 === $unknown['skipped'] && false !== strpos( $unknown['error']['message'], 'post describe' ) && isset( $unknown['error']['data']['post_types']['gk_command_portfolio'] ), 'Invalid types retain the batch failure contract and provide discovery guidance' );
 	$updated = $run( array( array( 'command' => 'post save', 'input' => array( 'id' => $id, 'meta' => array( 'gk_score' => 43 ), 'terms' => array( 'gk_command_kind' => array() ), 'featured_media' => 0 ) ) ) );
 	$assert( $updated['ok'] && 43 === (int) get_post_meta( $id, 'gk_score', true ) && ! get_post_thumbnail_id( $id ) && ! wp_get_object_terms( $id, 'gk_command_kind' ), 'Update metadata without fields, clear terms and featured image' );
 	$failed = $run( array(
@@ -98,7 +102,7 @@ try {
 		array( 'command' => 'post meta update', 'input' => array( 'post_id' => $id, 'key' => 'gk_score', 'value' => 99 ) ),
 	) );
 	$assert( ! $failed['ok'] && 1 === $failed['failed_index'] && 1 === $failed['skipped'] && 1 === count( $failed['results'] ) && 44 === (int) get_post_meta( $id, 'gk_score', true ), 'Batch failure reports completed writes and stops before later mutations' );
-	foreach ( array( array( 'gk_score' => 'wrong type' ), array( '_unregistered' => 'denied' ) ) as $meta ) {
+	foreach ( array( array( 'gk_score' => 'wrong type' ), array( 'gk_denied' => 'denied' ) ) as $meta ) {
 		$failed = $run( array( array( 'command' => 'post save', 'input' => array( 'id' => $id, 'fields' => array( 'title' => 'Must not change' ), 'meta' => $meta ) ) ) );
 		$assert( ! $failed['ok'] && 'Command portfolio' === get_post( $id )->post_title, 'Invalid or unauthorized metadata is rejected before updating fields' );
 	}
@@ -123,9 +127,10 @@ try {
 	$failed = $run( array( array( 'command' => 'plugin install', 'input' => array( 'slug' => 'hello-dolly' ) ) ) );
 	$assert( ! $failed['ok'], 'Command plugin installation preserves native permissions' );
 	remove_filter( 'user_has_cap', $deny );
-	$key = Guest_Key_Access::create( $uid );
+	$key = guest_key_test_entitled_create( $uid );
 	if ( is_wp_error( $key ) ) { throw new RuntimeException( $key->get_error_message() ); }
-	$assert( false !== strpos( $key['bundle'], 'Commands: GET ' ) && false !== strpos( $key['bundle'], 'run design guide' ), 'Copied connection bundle teaches commands and design guide discovery' );
+	$assert( false !== strpos( $key['bundle'], '1. Discover commands: GET ' ) && false !== strpos( $key['bundle'], 'use the "design guide" command first' ), 'Copied connection bundle teaches commands and design guide discovery' );
+	$assert( false !== strpos( $key['bundle'], 'Read-only example: {"commands":[{"command":"post list","input":{"post_type":"any"}}]}' ) && false !== strpos( $key['bundle'], 'Command names are JSON values, not shell commands.' ), 'Connection example discovers content without assuming terminal access or installing a plugin' );
 	$response = $http( 'GET', 'help', $key );
 	$assert( 200 === $response['status'] && in_array( 'post save', $response['data']['commands'], true ), 'Native Basic authentication reaches command help over HTTP' );
 	$assert( isset( $response['data']['post_types']['post'], $response['data']['post_types']['page'] ), 'Authenticated REST help includes the site’s registered type names' );

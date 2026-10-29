@@ -4,7 +4,7 @@ Inspect the active theme, the page's editor, templates and existing style preset
 
 ## Discover, then write
 
-Use `post describe` to discover post types, `post get` for existing content and `post meta describe` for registered fields. Inspect native REST route schemas with `rest request` and OPTIONS. Use `ability list` and `ability describe` to discover installed providers. Do not infer metadata keys, gallery formats or builder compatibility from a plugin's name.
+Use `post describe` to discover post types and `post get` for existing content. On posts you can edit, `post meta list/get` reads all stored metadata, including protected and unregistered fields. Writes also accept unregistered underscore keys; native field authorization callbacks, capability filters, readonly schemas, validation and sanitization still apply. `post meta describe` lists registered schemas, not every stored field. Generic metadata writes do not run plugin-specific editing-form validation. Inspect native REST route schemas with `rest request` and OPTIONS. Use `ability list` and `ability describe` to discover installed providers. Do not infer metadata keys, gallery formats or builder compatibility from a plugin's name.
 
 When a behavior or metadata format remains unclear, use `file list`, `file search` and `file read` to inspect the installed theme or plugin source under wp-content. Search for a hook, field key or rendered class, then read the surrounding implementation. Inspection is read-only; check scan limits and skipped files before concluding that a behavior is absent.
 

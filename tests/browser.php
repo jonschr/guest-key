@@ -3,6 +3,7 @@
 if ( ! defined( 'WP_CLI' ) || ! WP_CLI || is_multisite() || ! in_array( wp_get_environment_type(), array( 'local', 'development' ), true ) ) {
 	throw new RuntimeException( 'Use WP-CLI on a local/development single site with its web server running.' );
 }
+require_once __DIR__ . '/user-license-fixture.php';
 error_reporting( E_ALL & ~E_DEPRECATED );
 require_once ABSPATH . 'wp-admin/includes/plugin.php';
 $original_uid = get_current_user_id();
@@ -54,9 +55,10 @@ try {
 	$uid = wp_insert_user( array( 'user_login' => 'guest-key-browser-test-' . wp_generate_password( 10, false ), 'user_pass' => wp_generate_password( 32 ), 'role' => 'administrator' ) );
 	$assert( ! is_wp_error( $uid ), 'Create a temporary browser-test administrator' );
 	wp_set_current_user( $uid );
-	$key = Guest_Key_Access::create( $uid );
+	$key = guest_key_test_entitled_create( $uid );
 	$assert( ! is_wp_error( $key ) && false !== strpos( $key['bundle'], Guest_Key_Browser::url() ), 'Copied instructions include browser sign-in using the same credential' );
-	$assert( false !== strpos( $key['bundle'], 'User-Agent: <client>/<version> (user-directed AI agent; agent=<agent>; model=<model>)' ) && false !== strpos( $key['bundle'], 'Example only: User-Agent: T3Code/0.0.46-nightly.20261005.2689 (user-directed AI agent; agent=Codex; model=gpt-6.1-sol)' ) && false !== strpos( $key['bundle'], 'omit unknown fields or /version' ) && false !== strpos( $key['bundle'], 'Keep interactive browser user agents unchanged' ), 'Copied instructions identify the requesting client and agent, with an example and honest fallbacks' );
+	$assert( false !== strpos( $key['bundle'], 'User-Agent: <client>/<version> (user-directed AI agent; agent=<agent>; model=<model>)' ) && false !== strpos( $key['bundle'], 'omit unknown fields or /version' ) && false !== strpos( $key['bundle'], 'Keep interactive browser user agents unchanged' ) && false !== strpos( $key['bundle'], 'continue without this header' ), 'Request identification is tool-neutral and optional when unsupported' );
+	$assert( false === strpos( $key['bundle'], 'T3Code' ) && false === strpos( $key['bundle'], 't3_environment_read' ) && false === strpos( $key['bundle'], 't3_thread_configuration' ), 'Copied instructions do not require a particular coding client or its internal tools' );
 	$cookies = $login( $key );
 	$response = $http( admin_url(), 'GET', array(), $cookies );
 	$assert( 200 === wp_remote_retrieve_response_code( $response ) && false !== strpos( wp_remote_retrieve_body( $response ), 'wp-admin-bar-my-account' ), 'Temporary browser session accesses wp-admin' );
@@ -76,7 +78,7 @@ try {
 	if ( ! preg_match( '/"nonce":"([^"]+)"/', $html, $match ) ) { throw new RuntimeException( 'Admin nonce missing.' ); }
 	$response = $http( admin_url( 'admin-ajax.php' ), 'POST', array( 'action' => 'guest_key_create', 'nonce' => $match[1] ), $cookies );
 	$assert( 403 === wp_remote_retrieve_response_code( $response ), 'Temporary browser session cannot extend its access through AJAX' );
-	foreach ( array( 'status', 'email', 'verify', 'activate', 'remove' ) as $action ) {
+	foreach ( array( 'status', 'email', 'verify', 'activate', 'remove', 'share', 'claim_existing' ) as $action ) {
 		$response = $http( admin_url( 'admin-ajax.php' ), 'POST', array( 'action' => 'guest_key_license_' . $action, 'nonce' => $match[1] ), $cookies );
 		$assert( 403 === wp_remote_retrieve_response_code( $response ), 'Temporary browser session cannot change licensing through ' . $action );
 	}
@@ -85,7 +87,7 @@ try {
 	foreach ( $cookies as $cookie ) { $_COOKIE[ $cookie->name ] = rawurldecode( $cookie->value ); }
 	wp_cache_delete( $uid, 'user_meta' ); // HTTP requests updated native session metadata.
 	$assert( Guest_Key_Browser::is_guest_session() && ! current_user_can( 'edit_plugins' ) && ! current_user_can( 'edit_themes' ) && ! current_user_can( 'create_app_password', $uid ), 'Guest browser permissions exclude direct file editing and durable application passwords' );
-	$assert( is_wp_error( Guest_Key_Access::create( $uid ) ) && current_user_can( 'install_plugins' ) && current_user_can( 'upload_files' ), 'Guest sessions retain native installation/upload permissions without issuing replacement keys' );
+	$assert( is_wp_error( guest_key_test_entitled_create( $uid ) ) && current_user_can( 'install_plugins' ) && current_user_can( 'upload_files' ), 'Guest sessions retain native installation/upload permissions without issuing replacement keys' );
 	$manager = WP_Session_Tokens::get_instance( $uid );
 	$inherited = $manager->create( time() + DAY_IN_SECONDS );
 	$assert( ! empty( $manager->get( $inherited )[ Guest_Key_Browser::SESSION ] ) && apply_filters( 'auth_cookie_expiration', DAY_IN_SECONDS, $uid, false ) <= Guest_Key_Access::TTL, 'Replacement WordPress sessions inherit the Guest Key binding and remaining expiry' );
@@ -100,7 +102,7 @@ try {
 	$assert( 200 === wp_remote_retrieve_response_code( $response ) && ! $auth_cookies( $response ), 'Missing or invalid sign-in nonce cannot create a browser session' );
 
 	$normal_token = $manager->create( time() + DAY_IN_SECONDS );
-	$replacement = Guest_Key_Access::create( $uid );
+	$replacement = guest_key_test_entitled_create( $uid );
 	$assert( ! is_wp_error( $replacement ) && $anonymous( $cookies ), 'Key rotation immediately ends an existing guest browser session' );
 	$assert( ! $manager->verify( $inherited ) && $manager->verify( $normal_token ), 'Rotation physically removes guest tokens and preserves normal sessions' );
 	$cookies = $login( $replacement );
@@ -112,7 +114,7 @@ try {
 	$response = $http( home_url( '/' ), 'GET', array(), $obscured );
 	$assert( false === strpos( wp_remote_retrieve_body( $response ), 'wpadminbar' ), 'An invalid second cookie cannot bypass frontend key expiry' );
 	$assert( $anonymous( $cookies ), 'Browser access ends at key expiry without waiting for cron or cookie grace' );
-	$key = Guest_Key_Access::create( $uid );
+	$key = guest_key_test_entitled_create( $uid );
 	$cookies = $login( $key );
 	get_userdata( $uid )->set_role( 'subscriber' );
 	get_userdata( $uid )->add_cap( 'manage_options' );

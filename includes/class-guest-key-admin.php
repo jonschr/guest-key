@@ -87,7 +87,7 @@ final class Guest_Key_Admin {
 				'copyLabel' => __( 'Copy Guest Key', 'guest-key' ), 'copiedLabel' => __( 'Copied!', 'guest-key' ),
 				'durationHour' => __( '%s hour', 'guest-key' ), 'durationHours' => __( '%s hours', 'guest-key' ),
 				'durationMinute' => __( '%s minute', 'guest-key' ), 'durationMinutes' => __( '%s minutes', 'guest-key' ),
-				'copied' => __( 'Guest Key copied. Paste it into Claude, Codex, or another agent.', 'guest-key' ),
+				'copied' => __( 'Guest Key copied. Paste it into your AI agent.', 'guest-key' ),
 				/* translators: %s: Expiration time in the browser’s local time zone. */
 				'expires' => __( 'Access expires at %s.', 'guest-key' ), 'expiresTomorrow' => __( 'Access expires tomorrow at %s.', 'guest-key' ), 'expiresDay' => __( 'Access expires %s.', 'guest-key' ),
 				'fallback' => __( 'Access is ready. Your browser needs another click to copy it.', 'guest-key' ),
@@ -103,6 +103,12 @@ final class Guest_Key_Admin {
 				'licenseSettings' => __( 'License', 'guest-key' ), 'settings' => __( 'Guest Key settings', 'guest-key' ),
 				'trialTitle' => __( 'Free trial', 'guest-key' ), 'manageBilling' => __( 'Manage billing', 'guest-key' ),
 				'automaticLicense' => __( 'Purchasing with %s? Your license will connect automatically.', 'guest-key' ),
+				'sharedAccess' => __( 'Access is shared with you by %s.', 'guest-key' ),
+				'shareLicense' => __( 'Share your license', 'guest-key' ),
+				'shareIntro' => __( 'Your license covers only your account unless you select other administrators below.', 'guest-key' ),
+				'saveSharing' => __( 'Save sharing', 'guest-key' ), 'sharingSaved' => __( 'License sharing updated.', 'guest-key' ),
+				'claimExisting' => __( 'Claim existing license or trial', 'guest-key' ),
+				'claimIntro' => __( 'An existing license or trial could not be matched to an administrator. Claim it for your account if you manage it.', 'guest-key' ),
 				'licenseTitle' => __( 'Unlock Guest Key', 'guest-key' ),
 				'trialIntro' => __( 'Try every feature free for 3 days. No card required.', 'guest-key' ),
 				'trialExpired' => __( 'Your free trial has ended. Add a license to keep connecting your agent.', 'guest-key' ),
@@ -117,7 +123,7 @@ final class Guest_Key_Admin {
 				'changeEmail' => __( 'Change email or request a new code', 'guest-key' ),
 				'licenseKey' => __( 'License key', 'guest-key' ), 'activateLicense' => __( 'Activate license', 'guest-key' ),
 				'buyLicense' => __( 'Get a license key', 'guest-key' ), 'renewLicense' => __( 'Renew license', 'guest-key' ),
-				'checkLicense' => __( 'Check again', 'guest-key' ), 'removeLicense' => __( 'Remove license from this site', 'guest-key' ),
+				'checkLicense' => __( 'Check again', 'guest-key' ), 'removeLicense' => __( 'Remove my license', 'guest-key' ),
 				'continueConnect' => __( 'Connect agent', 'guest-key' ), 'working' => __( 'Working…', 'guest-key' ),
 			),
 		) );
@@ -186,7 +192,7 @@ final class Guest_Key_Admin {
 			<h1><?php esc_html_e( 'Guest Key', 'guest-key' ); ?></h1>
 			<div class="guest-key-layout">
 			<div class="guest-key-controls">
-			<section class="guest-key-card guest-key-connect<?php echo 'paid' !== $license['kind'] || ! $license['active'] ? ' guest-key-license-attention' : ''; ?>" id="guest-key-license-settings" aria-labelledby="guest-key-license-settings-title">
+			<section class="guest-key-card guest-key-connect<?php echo ! $license['active'] ? ' guest-key-license-attention' : ''; ?>" id="guest-key-license-settings" aria-labelledby="guest-key-license-settings-title">
 				<div data-guest-key-license-settings>
 					<h2 id="guest-key-license-settings-title"><?php echo 'paid' === $license['kind'] ? esc_html__( 'License', 'guest-key' ) : esc_html__( 'Get started', 'guest-key' ); ?></h2>
 					<noscript><p><?php esc_html_e( 'Enable JavaScript to manage your license.', 'guest-key' ); ?></p></noscript>

@@ -13,7 +13,7 @@
 .guest-key-card h2 { margin-top: 0; }
 .guest-key-card .button { margin: 0 6px 8px 0; }
 .guest-key-card [data-guest-key-create] { display: inline-flex; align-items: center; gap: 6px; }
-.guest-key-page .guest-key-card .button[data-guest-key-create] .dashicons { width: 18px; height: 18px; font-size: 18px; color: inherit; }
+.guest-key-page .guest-key-card .button[data-guest-key-create] .dashicons { width: 18px; height: 18px; font-size: 18px; line-height: 1; color: inherit; }
 #guest-key-grant-status:empty { margin: 0; }
 .guest-key-duration-row { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 16px; }
 .guest-key-duration-field { flex: 1; min-width: 140px; }

@@ -10,10 +10,9 @@ $http = static function ( $url, $args = array() ) {
 };
 try {
 	$record = array( 'kind' => 'trial', 'site' => trailingslashit( home_url( '/' ) ), 'status' => 'active', 'expires' => time() + 90, 'checked' => time(), 'token' => str_repeat( 't', 43 ) );
-	update_option( Guest_Key_License::OPTION, $record, false );
 	$uid = wp_insert_user( array( 'user_login' => 'gk-license-expiry-' . wp_generate_password( 8, false ), 'user_pass' => wp_generate_password( 32 ), 'role' => 'administrator' ) );
 	if ( is_wp_error( $uid ) ) { throw new RuntimeException( 'Could not create test administrator.' ); }
-	wp_set_current_user( $uid ); $key = Guest_Key_Access::create( $uid );
+	wp_set_current_user( $uid ); update_option( Guest_Key_License::option_name( $uid ), $record, false ); $key = Guest_Key_Access::create( $uid );
 	$assert( ! is_wp_error( $key ), 'Confirmed trial can create access' );
 	$grant = Guest_Key_Access::grant( $uid );
 	$assert( $grant['expires'] === $record['expires'], 'Issued credentials stop at trial expiration even when less than two hours remain' );
@@ -24,7 +23,7 @@ try {
 	$login = $http( Guest_Key_Browser::url(), array( 'method' => 'POST', 'body' => array( 'log' => $key['username'], 'pwd' => $key['password'], 'guest_key_nonce' => $nonce[1] ) ) );
 	$cookies = wp_remote_retrieve_cookies( $login );
 	$assert( 302 === wp_remote_retrieve_response_code( $login ) && count( $cookies ) >= 2, 'Trial credential can establish a temporary browser session' );
-	$record['expires'] = time() - 1; update_option( Guest_Key_License::OPTION, $record, false );
+	$record['expires'] = time() - 1; update_option( Guest_Key_License::option_name( $uid ), $record, false );
 	$rest = $http( rest_url( 'wp/v2/users/me' ), array( 'headers' => $headers ) );
 	$assert( 401 === wp_remote_retrieve_response_code( $rest ), 'License expiration immediately blocks an already-issued REST credential' );
 	$browser = $http( admin_url(), array( 'cookies' => $cookies ) );
@@ -40,7 +39,7 @@ try {
 	}
 	$assert( $updates, 'Plugin Update Checker remains registered without an active trial or license' );
 } finally {
-	if ( $uid && ! is_wp_error( $uid ) ) { Guest_Key_Access::revoke( $uid ); wp_delete_user( $uid ); }
+	if ( $uid && ! is_wp_error( $uid ) ) { Guest_Key_Access::revoke( $uid ); delete_option( Guest_Key_License::option_name( $uid ) ); wp_delete_user( $uid ); }
 	if ( null === $original ) { delete_option( Guest_Key_License::OPTION ); } else { update_option( Guest_Key_License::OPTION, $original, false ); }
 	$assert( $grants === Guest_Key_Access::grants(), 'License-expiration checks preserve existing grants' );
 }

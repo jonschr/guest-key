@@ -6,6 +6,7 @@
 if ( ! defined( 'WP_CLI' ) || ! WP_CLI || is_multisite() || ! in_array( wp_get_environment_type(), array( 'local', 'development' ), true ) ) {
 	throw new RuntimeException( 'Use WP-CLI on a local/development single site.' );
 }
+require_once __DIR__ . '/user-license-fixture.php';
 error_reporting( E_ALL & ~E_DEPRECATED );
 
 $checks = 0;
@@ -23,6 +24,7 @@ $get = $_GET;
 $determine = $GLOBALS['wp_filter']['determine_current_user'] ?? null;
 $grants = Guest_Key_Access::grants();
 $uid = null;
+$meta_post_id = null;
 $mail = static function () { return true; };
 $attempts = 0;
 $cap_checks = 0;
@@ -60,9 +62,18 @@ $mcp = static function ( $method, $params, $session = '' ) {
 	return $response;
 };
 add_filter( 'pre_wp_mail', $mail );
+register_post_meta( 'post', '_gk_transport_denied', array( 'type' => 'string', 'single' => true, 'auth_callback' => '__return_false' ) );
 try {
 	$uid = wp_insert_user( array( 'user_login' => 'guest-key-auth-test-' . wp_generate_password( 10, false ), 'user_pass' => wp_generate_password( 32 ), 'role' => 'administrator' ) );
 	$assert( ! is_wp_error( $uid ), 'Create a temporary authentication-test administrator' );
+	guest_key_test_entitle( $uid );
+	$meta_post_id = wp_insert_post( array( 'post_title' => 'Guest Key metadata transport fixture', 'post_status' => 'draft', 'post_author' => $uid ), true );
+	$assert( ! is_wp_error( $meta_post_id ), 'Create a temporary post for metadata transport checks' );
+	add_post_meta( $meta_post_id, '_land_co_property_sms_number', '555-0100' );
+	add_post_meta( $meta_post_id, '_land_co_property_sms_number', '555-0101' );
+	add_post_meta( $meta_post_id, '_gk_meta_read_empty', '' );
+	add_post_meta( $meta_post_id, '_gk_transport_denied', 'original' );
+
 	$created = WP_Application_Passwords::create_new_application_password( $uid, array( 'name' => 'Guest Key authentication regression', 'app_id' => Guest_Key_Access::APP_ID ) );
 	$assert( ! is_wp_error( $created ), 'Create a temporary native application password' );
 	list( $password, $item ) = $created;
@@ -105,6 +116,32 @@ try {
 	$response = $mcp( 'tools/call', array( 'name' => 'guest-key-run', 'arguments' => array( 'commands' => array( array( 'command' => 'user meta get', 'input' => array( 'user_id' => $uid, 'key' => 'nickname' ) ) ) ) ), $session );
 	$data = $response->get_data()['result']['structuredContent'] ?? array();
 	$assert( 200 === $response->get_status() && ! empty( $data['ok'] ) && ! empty( $data['results'][0]['data']['values'] ), 'Generic metadata commands use the existing MCP tool without expanding its list' );
+	$reads = array( 'commands' => array(
+		array( 'command' => 'post meta get', 'input' => array( 'post_id' => $meta_post_id, 'key' => '_land_co_property_sms_number' ) ),
+		array( 'command' => 'post meta list', 'input' => array( 'post_id' => $meta_post_id ) ),
+	) );
+	$response = $mcp( 'tools/call', array( 'name' => 'guest-key-run', 'arguments' => $reads ), $session );
+	$data = $response->get_data()['result']['structuredContent'];
+	$assert( ! empty( $data['ok'] ) && array( '555-0100', '555-0101' ) === $data['results'][0]['data']['values'] && array( '' ) === $data['results'][1]['data']['_gk_meta_read_empty'], 'MCP reads unregistered protected metadata and preserves multiple/empty values' );
+	$rest_commands = static function ( $body ) {
+		$request = new WP_REST_Request( 'POST', '/guest-key/v1/run' );
+		$request->set_header( 'Content-Type', 'application/json' ); $request->set_body( wp_json_encode( $body ) );
+		return rest_do_request( $request )->get_data();
+	};
+	$data = $rest_commands( $reads );
+	$assert( ! empty( $data['ok'] ) && true === $data['results'][0]['data']['exists'] && array( '555-0100', '555-0101' ) === $data['results'][1]['data']['_land_co_property_sms_number'], 'REST commands use the same complete metadata-read policy' );
+	$response = $mcp( 'tools/call', array( 'name' => 'guest-key-run', 'arguments' => array( 'commands' => array( array( 'command' => 'post meta update', 'input' => array( 'post_id' => $meta_post_id, 'key' => '_land_co_property_sms_number', 'value' => '555-0102' ) ) ) ) ), $session );
+	$data = $response->get_data()['result']['structuredContent'];
+	$assert( $data['ok'] && array( '555-0102', '555-0102' ) === get_post_meta( $meta_post_id, '_land_co_property_sms_number', false ), 'MCP permits underscore fields on editable posts through native metadata writes' );
+	$data = $rest_commands( array( 'commands' => array( array( 'command' => 'post meta delete', 'input' => array( 'post_id' => $meta_post_id, 'key' => '_land_co_property_sms_number' ) ) ) ) );
+	$assert( $data['ok'] && ! metadata_exists( 'post', $meta_post_id, '_land_co_property_sms_number' ), 'REST permits protected-field deletion under the same post-editor policy' );
+	$denied_write = array( 'commands' => array( array( 'command' => 'post meta update', 'input' => array( 'post_id' => $meta_post_id, 'key' => '_gk_transport_denied', 'value' => 'denied' ) ) ) );
+	$response = $mcp( 'tools/call', array( 'name' => 'guest-key-run', 'arguments' => $denied_write ), $session );
+	$data = $response->get_data()['result']['structuredContent'];
+	$assert( ! $data['ok'] && 'guest_key_content_denied' === $data['error']['code'], 'MCP preserves registered field authorization denials' );
+	$data = $rest_commands( $denied_write );
+	$assert( ! $data['ok'] && 'original' === get_post_meta( $meta_post_id, '_gk_transport_denied', true ), 'REST preserves registered field authorization denials without mutation' );
+
 
 	$deny = static function ( $caps ) { $caps['manage_options'] = false; return $caps; };
 	add_filter( 'user_has_cap', $deny );
@@ -158,10 +195,12 @@ try {
 	$reset( $regular[0] );
 	$assert( get_current_user_id() === $uid && ! Guest_Key_Access::can_connect() && ! Guest_Key_Access::is_guest_request( $uid ) && current_user_can( 'create_app_password', $uid ) && current_user_can( 'edit_plugins' ), 'Unrelated passwords retain their ordinary permissions and cannot enter Guest Key MCP' );
 } finally {
+	unregister_post_meta( 'post', '_gk_transport_denied' );
 	remove_filter( 'map_meta_cap', $cap_filter );
 	remove_filter( 'application_password_is_api_request', '__return_true' );
 	if ( $determine ) { $GLOBALS['wp_filter']['determine_current_user'] = $determine; }
 	else { unset( $GLOBALS['wp_filter']['determine_current_user'] ); }
+	if ( is_int( $meta_post_id ) ) { wp_delete_post( $meta_post_id, true ); }
 	$_SERVER = $server;
 	$_GET = $get;
 	wp_set_current_user( 0 );

@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/user-license-fixture.php';
 /** wp --user=admin eval-file tests/files.php; temporary directories and credentials are removed. */
 if ( ! defined( 'WP_CLI' ) || ! WP_CLI || is_multisite() || ! in_array( wp_get_environment_type(), array( 'local', 'development' ), true ) || ! Guest_Key_Access::administrator() ) { throw new RuntimeException( 'Use WP-CLI as an administrator on a local/development single site with its web server running.' ); }
 error_reporting( E_ALL & ~E_DEPRECATED );
@@ -16,10 +17,13 @@ $checks = 0;
 $assert = static function ( $condition, $message ) use ( &$checks ) { if ( ! $condition ) { throw new RuntimeException( $message ); } $checks++; echo 'PASS: ' . $message . "\n"; };
 $call = static function ( $name, $input = array() ) { return wp_get_ability( 'guest-key/' . $name )->execute( $input ); };
 $http = static function ( $path, $parameters = array(), $key = null, $method = 'GET', $plain = false ) {
-	$url = $plain ? add_query_arg( array_merge( array( 'rest_route' => '/guest-key/v1/' . $path ), $parameters ), home_url( '/' ) ) : add_query_arg( $parameters, rest_url( 'guest-key/v1/' . $path ) );
+	$query = 'POST' === $method ? array() : $parameters;
+	$url = $plain ? add_query_arg( array_merge( array( 'rest_route' => '/guest-key/v1/' . $path ), $query ), home_url( '/' ) ) : add_query_arg( $query, rest_url( 'guest-key/v1/' . $path ) );
 	$headers = array();
 	if ( $key ) { $headers['Authorization'] = 'Basic ' . base64_encode( $key['username'] . ':' . $key['password'] ); }
-	$r = wp_remote_request( $url, array( 'method' => $method, 'headers' => $headers, 'sslverify' => false, 'timeout' => 20, 'user-agent' => 'GuestKey/' . GUEST_KEY_VERSION . ' (read-only filesystem regression test)' ) );
+	$args = array( 'method' => $method, 'headers' => $headers, 'sslverify' => false, 'timeout' => 20, 'user-agent' => 'GuestKeyTests/' . GUEST_KEY_VERSION . ' (user-directed AI agent)' );
+	if ( 'POST' === $method ) { $args['headers']['Content-Type'] = 'application/json'; $args['body'] = wp_json_encode( $parameters ); }
+	$r = wp_remote_request( $url, $args );
 	if ( is_wp_error( $r ) ) { throw new RuntimeException( $r->get_error_message() ); }
 	return array( 'status' => wp_remote_retrieve_response_code( $r ), 'data' => json_decode( wp_remote_retrieve_body( $r ), true ), 'headers' => wp_remote_retrieve_headers( $r ) );
 };
@@ -53,6 +57,19 @@ try {
 	$assert( 1 === count( $r['items'] ) && 1 === $r['next_offset'] && ! $r['complete'], 'Listing reports its page boundary' );
 	$r = $call( 'list-files', array( 'path' => $relative . '/clean', 'offset' => 1 ) );
 	$assert( array() === $r['items'] && $r['complete'], 'Listing pagination ends cleanly after the last entry' );
+	$r = $call( 'list-files', array( 'path' => $relative, 'depth' => 1, 'search' => '.css' ) );
+	$deeper = $call( 'list-files', array( 'path' => $relative, 'depth' => 2, 'search' => '.css' ) );
+	$assert( array() === $r['items'] && array( $relative . '/nested/rules.css' ) === array_column( $deeper['items'], 'path' ) && $deeper['complete'], 'Depth bounds listing independently of the legacy recursive flag' );
+	$expected = $call( 'list-files', array( 'path' => $relative, 'depth' => 2 ) );
+	$seen = array(); $cursor = null; $pages = 0;
+	do {
+		$args = array( 'path' => $relative, 'depth' => 2, 'limit' => 1 );
+		if ( $cursor ) { $args['cursor'] = $cursor; }
+		$r = $call( 'list-files', $args );
+		$seen = array_merge( $seen, array_column( $r['items'], 'path' ) ); $cursor = $r['next_cursor'];
+		if ( ++$pages > 50 ) { throw new RuntimeException( 'Listing cursor failed to advance.' ); }
+	} while ( $cursor );
+	$assert( array_column( $expected['items'], 'path' ) === $seen && count( $seen ) === count( array_unique( $seen ) ), 'Listing cursors cross directory boundaries without duplicate or missing entries' );
 	$r = $call( 'read-file', array( 'path' => $relative . '/example.php' ) );
 	$assert( $source === $r['content'] && null === $r['next_offset'] && 1 === $r['line'] && ! file_exists( $fixture . '/executed' ), 'Reading PHP returns source without evaluating it' );
 	$r = $call( 'read-file', array( 'path' => $relative . '/inside-file' ) );
@@ -83,6 +100,33 @@ try {
 	$assert( 1 === count( $r['matches'] ) && 1 === $r['next_offset'] && 'results' === $r['scan']['limited'], 'Search reports a result-page continuation' );
 	$r = $call( 'search-files', array( 'path' => $relative . '/clean', 'query' => 'needle', 'offset' => 1 ) );
 	$assert( 2 === count( $r['matches'] ) && 2 === $r['matches'][0]['line'] && $r['complete'], 'Search pagination resumes with subsequent matching lines' );
+	$args = array( 'path' => $relative . '/clean', 'query' => 'needle', 'limit' => 1 );
+	$first = $call( 'search-files', $args ); $cursor = $first['next_cursor'];
+	$second = $call( 'search-files', array_merge( $args, array( 'cursor' => $cursor, 'limit' => 2 ) ) );
+	$last = $call( 'search-files', array_merge( $args, array( 'cursor' => $second['next_cursor'] ) ) );
+	$assert( array( 2, 3 ) === array_column( $second['matches'], 'line' ) && array() === $last['matches'] && null === $last['next_cursor'] && $last['complete'], 'Search cursors resume within a file with exact lines, allow a new limit, and terminate' );
+	$assert( is_wp_error( $call( 'search-files', array_merge( $args, array( 'cursor' => $cursor . 'tampered' ) ) ) ), 'Tampered scan cursors are rejected' );
+	$assert( is_wp_error( $call( 'search-files', array_merge( $args, array( 'cursor' => $cursor, 'query' => 'different' ) ) ) ), 'Scan cursors are bound to the original filters' );
+	wp_set_current_user( $owner );
+	$assert( is_wp_error( $call( 'search-files', array_merge( $args, array( 'cursor' => $cursor ) ) ) ), 'Scan cursors cannot be reused by another administrator' );
+	wp_set_current_user( $uid );
+	$parts = explode( '.', $cursor, 2 ); $expired = json_decode( base64_decode( $parts[0] ), true ); $expired['expires'] = time() - 1;
+	$payload = base64_encode( wp_json_encode( $expired ) );
+	$assert( is_wp_error( $call( 'search-files', array_merge( $args, array( 'cursor' => $payload . '.' . hash_hmac( 'sha256', $payload, wp_salt( 'auth' ) ) ) ) ) ), 'Expired scan cursors request a fresh scan' );
+	$r = $call( 'search-files', array( 'path' => $relative, 'query' => 'NEEDLE', 'case_sensitive' => true, 'depth' => 1 ) );
+	$deeper = $call( 'search-files', array( 'path' => $relative, 'query' => 'NEEDLE', 'case_sensitive' => true, 'depth' => 2 ) );
+	$assert( array() === $r['matches'] && 1 === count( $deeper['matches'] ), 'Search depth is bounded with the same meaning as listing depth' );
+	$checkpoint_method = new ReflectionMethod( Guest_Key_Files::class, 'checkpoint' );
+	$walk_method = new ReflectionMethod( Guest_Key_Files::class, 'walk' );
+	$cursor_method = new ReflectionMethod( Guest_Key_Files::class, 'cursor' );
+	foreach ( array( $checkpoint_method, $walk_method, $cursor_method ) as $method ) { $method->setAccessible( true ); }
+	$args = array( 'path' => $relative . '/clean' ); $checkpoint = $checkpoint_method->invoke( null, $args, 'list' );
+	$state = array( 'entries_scanned' => 0, 'limited' => null );
+	$walk = $walk_method->invokeArgs( null, array( &$checkpoint, 1, &$state, microtime( true ) - 1 ) );
+	iterator_to_array( $walk );
+	$cursor = $cursor_method->invoke( null, $checkpoint, $state );
+	$r = $call( 'list-files', array_merge( $args, array( 'cursor' => $cursor ) ) );
+	$assert( 'time' === $state['limited'] && 0 === $state['entries_scanned'] && 1 === count( $r['items'] ) && $r['complete'], 'An expired scan deadline preserves a cursor that resumes at the untouched directory entry' );
 	$batch = wp_get_ability( 'guest-key/run' )->execute( array( 'commands' => array(
 		array( 'command' => 'file search', 'input' => array( 'path' => $relative . '/clean', 'query' => 'needle', 'limit' => 1 ) ),
 		array( 'command' => 'file read', 'input' => array( 'path' => array( '$ref' => '0.data.matches.0.path' ), 'offset' => array( '$ref' => '0.data.matches.0.line_offset' ) ) ),
@@ -92,6 +136,8 @@ try {
 	for ( $i = 0; $i < 9; $i++ ) { file_put_contents( $fixture . '/byte-limit/' . $i . '.txt', str_repeat( 'z', Guest_Key_Files::MAX_FILE_BYTES ) ); }
 	$r = $call( 'search-files', array( 'path' => $relative . '/byte-limit', 'query' => 'not-present' ) );
 	$assert( 'bytes' === $r['scan']['limited'] && ! $r['complete'] && $r['scan']['bytes_scanned'] <= Guest_Key_Files::MAX_SCAN_BYTES, 'Search stops at its total byte budget and reports an incomplete scan' );
+	$continued = $call( 'search-files', array( 'path' => $relative . '/byte-limit', 'query' => 'not-present', 'cursor' => $r['next_cursor'] ) );
+	$assert( $continued['complete'] && 1 === $continued['scan']['files_scanned'] && null === $continued['next_cursor'], 'Byte-limit continuation reads the remaining file without rescanning the first 16 MiB' );
 	file_put_contents( $fixture . '/oversized.txt', str_repeat( 'x', Guest_Key_Files::MAX_FILE_BYTES + 1 ) );
 	$r = $call( 'read-file', array( 'path' => $relative . '/oversized.txt' ) );
 	$assert( is_wp_error( $r ) && 413 === $r->get_error_data()['status'], 'Individual file size is bounded' );
@@ -99,13 +145,15 @@ try {
 	for ( $i = 0; $i <= Guest_Key_Files::MAX_ENTRIES; $i++ ) { touch( $fixture . '/entry-limit/' . $i ); }
 	$r = $call( 'search-files', array( 'path' => $relative . '/entry-limit', 'query' => 'not-present' ) );
 	$assert( 'entries' === $r['scan']['limited'] && ! $r['complete'] && Guest_Key_Files::MAX_ENTRIES === $r['scan']['entries_scanned'], 'Search stops at its entry budget' );
+	$continued = $call( 'search-files', array( 'path' => $relative . '/entry-limit', 'query' => 'not-present', 'cursor' => $r['next_cursor'] ) );
+	$assert( $continued['complete'] && 1 === $continued['scan']['entries_scanned'] && null === $continued['next_cursor'], 'Entry-limit continuation reaches the final file without replaying the first 5,000 entries' );
 	$deep = $fixture . '/depth-limit'; mkdir( $deep );
 	for ( $i = 0; $i <= Guest_Key_Files::MAX_DEPTH; $i++ ) { $deep .= '/d'; mkdir( $deep ); }
 	file_put_contents( $deep . '/deep.txt', 'needle' );
 	$r = $call( 'search-files', array( 'path' => $relative . '/depth-limit', 'query' => 'needle' ) );
 	$assert( ! $r['complete'] && 1 === $r['scan']['skipped']['depth'], 'Directory-depth omissions are explicit' );
 	mkdir( $fixture . '/boolean' ); mkdir( $fixture . '/boolean/child' ); touch( $fixture . '/boolean/child/style.css' );
-	$key = Guest_Key_Access::create( $uid );
+	$key = guest_key_test_entitled_create( $uid );
 	if ( is_wp_error( $key ) ) { throw new RuntimeException( $key->get_error_message() ); }
 	foreach ( array( 'files' => array( 'path' => $relative . '/clean' ), 'files/read' => array( 'path' => $relative . '/example.php', 'offset' => 6, 'length' => 30 ), 'files/search' => array( 'path' => $relative . '/clean', 'query' => 'needle', 'case_sensitive' => 'true', 'limit' => 1 ) ) as $path => $parameters ) {
 		$r = $http( $path, $parameters, $key );
@@ -116,6 +164,17 @@ try {
 	}
 	$r = $http( 'files/search', array( 'path' => $relative . '/clean', 'query' => 'NEEDLE', 'case_sensitive' => 'false' ), $key );
 	$assert( 200 === $r['status'] && 3 === count( $r['data']['matches'] ), 'GET case_sensitive=false preserves case-insensitive search' );
+	$args = array( 'path' => $relative . '/clean', 'query' => 'needle', 'limit' => 1 );
+	$first = $http( 'files/search', $args, $key );
+	$second = $http( 'files/search', array_merge( $args, array( 'cursor' => $first['data']['next_cursor'], 'limit' => 2 ) ), $key );
+	$assert( 200 === $second['status'] && array( 2, 3 ) === array_column( $second['data']['matches'], 'line' ), 'Signed search cursors survive GET URL encoding and HTTP schema validation' );
+	$r = $http( 'files', array( 'path' => $relative . '/boolean', 'depth' => 2, 'search' => '.css', 'limit' => 1 ), $key );
+	$continued = $http( 'files', array( 'path' => $relative . '/boolean', 'depth' => 2, 'search' => '.css', 'limit' => 1, 'cursor' => $r['data']['next_cursor'] ), $key );
+	$assert( 200 === $r['status'] && array( $relative . '/boolean/child/style.css' ) === array_column( $r['data']['items'], 'path' ) && 200 === $continued['status'] && null === $continued['data']['next_cursor'], 'HTTP listing supports depth and resumable cursors' );
+	$large = str_repeat( "source fixture line\n", 4000 ); file_put_contents( $fixture . '/large.txt', $large );
+	$reads = array_fill( 0, 3, array( 'command' => 'file read', 'input' => array( 'path' => $relative . '/large.txt', 'length' => 65536 ) ) );
+	$r = $http( 'run', array( 'commands' => $reads ), $key, 'POST' );
+	$assert( 200 === $r['status'] && $r['data']['ok'] && 3 === count( $r['data']['results'] ) && array( 65536, 65536, 65536 ) === array_map( static function ( $row ) { return strlen( $row['data']['content'] ); }, $r['data']['results'] ), 'HTTP batches preserve all three 64 KiB source chunks without clipping or invalid JSON' );
 	foreach ( array( 'false' => 0, 'true' => 1 ) as $recursive => $count ) {
 		$r = $http( 'files', array( 'path' => $relative . '/boolean', 'search' => '.css', 'recursive' => $recursive ), $key );
 		$assert( 200 === $r['status'] && $count === count( $r['data']['items'] ), 'GET recursive=' . $recursive . ' controls directory traversal' );

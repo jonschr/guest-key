@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/user-license-fixture.php';
 /** Run with an empty WP_PLUGIN_DIR, DISALLOW_FILE_MODS=true and the adapter filtered out of active_plugins. */
 if ( ! defined( 'WP_CLI' ) || ! WP_CLI || is_multisite() || ! in_array( wp_get_environment_type(), array( 'local', 'development' ), true ) || ! defined( 'DISALLOW_FILE_MODS' ) || ! DISALLOW_FILE_MODS || file_exists( WP_PLUGIN_DIR . '/mcp-adapter/mcp-adapter.php' ) ) { throw new RuntimeException( 'Use the isolated missing-adapter bootstrap described in README on a local single site.' ); }
 if ( ! class_exists( 'Guest_Key_Access' ) ) { require dirname( __DIR__ ) . '/guest-key.php'; }
@@ -18,7 +19,7 @@ add_filter( 'option_guest_key_adapter_managed', $managed );
 add_filter( 'option_active_plugins', $active_plugins );
 try {
 	wp_set_current_user( $uid );
-	$key = Guest_Key_Access::create( $uid );
+	$key = guest_key_test_entitled_create( $uid );
 	$assert( ! is_wp_error( $key ) && ! empty( $key['password'] ), 'Native credential creation succeeds without an installable MCP adapter' );
 	$assert( false === $key['mcp']['ready'] && null === $key['endpoint'] && 'guest_key_install_denied' === $key['mcp']['error']['code'], 'MCP readiness and setup error are reported separately' );
 	$assert( false !== strpos( $key['bundle'], 'Optional MCP unavailable:' ) && false !== strpos( $key['bundle'], 'Native REST commands and browser sign-in are ready.' ), 'Connection bundle gives working native paths instead of an unavailable MCP endpoint' );

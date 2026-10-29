@@ -110,6 +110,13 @@ final class Guest_Key_Commands {
 		if ( '' === $command || 'post' === $command || 0 === strpos( $command, 'post ' ) ) {
 			$result['post_types'] = wp_list_pluck( get_post_types( array(), 'objects' ), 'label' );
 		}
+		if ( '' === $command ) {
+			$result['conventions'] = array(
+				'parameters' => 'Use exact command schemas. id identifies a post for post commands; post_id identifies its container for post meta; key identifies a metadata field or site option. Options have no post_id. File path is relative to wp-content (plugins/example/file.php), never a server absolute path.',
+				'pagination' => 'File list/search: repeat filters and pass next_cursor as cursor until null; limit controls result count, depth bounds directory levels. File read: next_offset becomes offset; length controls bytes. Post list: page/per_page. Check scan.skipped on every file scan page.',
+				'output' => 'Keep large reads in separate requests and use small pages/chunks. Guest Key does not truncate batches; a client may cap displayed output. After a cutoff, verify completed writes before retrying; batches are not transactions.',
+			);
+		}
 		return $result;
 	}
 

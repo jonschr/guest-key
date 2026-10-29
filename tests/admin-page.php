@@ -19,7 +19,7 @@ $render = static function () {
 	return new DOMXPath( $dom );
 };
 add_filter( 'get_user_metadata', $metadata, 10, 3 );
-add_filter( 'pre_option_' . Guest_Key_License::OPTION, $license_option );
+add_filter( 'pre_option_' . Guest_Key_License::option_name(), $license_option );
 try {
 	$bar = new WP_Admin_Bar(); Guest_Key_Admin::toolbar( $bar );
 	$children = array_filter( $bar->get_nodes(), static function ( $node ) { return 'guest-key-access' === $node->parent; } );
@@ -58,7 +58,7 @@ try {
 } finally {
 	remove_filter( 'wp_is_application_passwords_available_for_user', $unavailable );
 	remove_filter( 'get_user_metadata', $metadata, 10 );
-	remove_filter( 'pre_option_' . Guest_Key_License::OPTION, $license_option );
+	remove_filter( 'pre_option_' . Guest_Key_License::option_name(), $license_option );
 	$assert( $grants === Guest_Key_Access::grants(), 'Page checks preserve existing access grants' );
 }
 echo "Completed {$checks} settings-page checks; no persistent fixtures created.\n";

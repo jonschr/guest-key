@@ -9,7 +9,7 @@ wp_register_ability( 'guest-key/save-post', array(
 		'id' => array( 'type' => 'integer', 'minimum' => 1 ),
 		'post_type' => array( 'type' => 'string' ),
 		'fields' => array( 'type' => 'object', 'additionalProperties' => true, 'description' => 'Fields from post create/update: title, content, excerpt, slug, status, author, parent, menu_order, password, date, comment_status, ping_status.' ),
-		'meta' => array( 'type' => 'object', 'maxProperties' => 100, 'additionalProperties' => true ),
+		'meta' => array( 'type' => 'object', 'maxProperties' => 100, 'additionalProperties' => true, 'description' => 'Custom-field keys and values, including unregistered underscore keys. Native field authorization, readonly schemas, validation and sanitization still apply.' ),
 		'terms' => array( 'type' => 'object', 'maxProperties' => 100, 'additionalProperties' => array( 'type' => 'array', 'maxItems' => 100, 'items' => array( 'type' => 'integer', 'minimum' => 1 ) ) ),
 		'featured_media' => array( 'type' => 'integer', 'minimum' => 0 ),
 	), 'additionalProperties' => false ),

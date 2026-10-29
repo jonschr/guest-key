@@ -22,10 +22,22 @@ final class Guest_Key_Content_Abilities {
 		return new WP_Error( 'guest_key_content_invalid', $message );
 	}
 
+
+	private static function unknown_post_type() {
+		$types = array_filter( get_post_types( array(), 'objects' ), static function ( $type ) {
+			return current_user_can( $type->cap->edit_posts );
+		} );
+		$names = wp_list_pluck( $types, 'label' );
+		ksort( $names );
+		return new WP_Error( 'guest_key_content_invalid',
+			'Unknown post type. Valid post types: ' . ( $names ? implode( ', ', array_keys( $names ) ) : 'none editable by your account' ) . '. Use post list with post_type "any" to search across types, or run post describe for details.',
+			array( 'post_types' => $names ) );
+	}
+
 	public static function posts( $input ) {
 		$action = $input['action'];
 		if ( 'describe' === $action ) {
-			if ( isset( $input['post_type'] ) && ! post_type_exists( $input['post_type'] ) ) { return self::invalid( 'Unknown post type. Run post describe to discover registered post type names.' ); }
+			if ( isset( $input['post_type'] ) && ! post_type_exists( $input['post_type'] ) ) { return self::unknown_post_type(); }
 			$types = array();
 			foreach ( get_post_types( array(), 'objects' ) as $type ) {
 				if ( isset( $input['post_type'] ) && $input['post_type'] !== $type->name ) { continue; }
@@ -44,7 +56,7 @@ final class Guest_Key_Content_Abilities {
 		}
 		$any = 'list' === $action && 'any' === ( $input['post_type'] ?? '' );
 		$type = $any ? null : get_post_type_object( $post ? $post->post_type : ( $input['post_type'] ?? 'post' ) );
-		if ( ! $any && ! $type ) { return self::invalid( 'Unknown post type. Run post describe to discover registered post type names.' ); }
+		if ( ! $any && ! $type ) { return self::unknown_post_type(); }
 		if ( 'list' === $action ) {
 			$types = array_filter( $any ? get_post_types( array(), 'objects' ) : array( $type->name => $type ), static function ( $candidate ) { return current_user_can( $candidate->cap->edit_posts ); } );
 			if ( ! $types ) { return self::denied(); }
@@ -188,21 +200,22 @@ final class Guest_Key_Content_Abilities {
 				if ( $key && $key !== $name ) { continue; }
 				unset( $args['auth_callback'], $args['sanitize_callback'] );
 				$fields[ $name ] = array( 'registration' => $args, 'protected' => is_protected_meta( $name, 'post' ) );
-				if ( $post ) { $fields[ $name ]['can_edit'] = current_user_can( 'edit_post_meta', $post->ID, $name ); }
+				if ( $post ) { $fields[ $name ]['can_edit'] = self::can_write_meta( 'edit_post_meta', $post->ID, $name ) && ! is_wp_error( self::validate_meta( $type->name, $name, null, false ) ); }
 			}
 			return $fields;
 		}
+		// Editing this post authorizes all stored reads; writes additionally honor declared field rules.
 		if ( 'list' === $action ) {
 			$values = array();
 			foreach ( get_post_meta( $post->ID ) as $name => $unused ) {
-				if ( current_user_can( 'edit_post_meta', $post->ID, $name ) ) { $values[ $name ] = get_post_meta( $post->ID, $name, false ); }
+				$values[ $name ] = get_post_meta( $post->ID, $name, false );
 			}
 			return $values;
 		}
 		if ( ! $key ) { return self::invalid( 'Provide a nonempty meta key.' ); }
-		$cap = 'delete' === $action ? 'delete_post_meta' : ( 'add' === $action ? 'add_post_meta' : 'edit_post_meta' );
-		if ( ! current_user_can( $cap, $post->ID, $key ) ) { return self::denied(); }
 		if ( 'get' === $action ) { return array( 'key' => $key, 'exists' => metadata_exists( 'post', $post->ID, $key ), 'values' => get_post_meta( $post->ID, $key, false ) ); }
+		$cap = 'delete' === $action ? 'delete_post_meta' : ( 'add' === $action ? 'add_post_meta' : 'edit_post_meta' );
+		if ( ! self::can_write_meta( $cap, $post->ID, $key ) ) { return self::denied(); }
 		if ( in_array( $action, array( 'add', 'update' ), true ) ) {
 			if ( ! array_key_exists( 'value', $input ) ) { return self::invalid( 'Provide a value to add or update.' ); }
 		}
@@ -222,6 +235,19 @@ final class Guest_Key_Content_Abilities {
 			$result = delete_post_meta( $post->ID, wp_slash( $key ), wp_slash( $input['value'] ?? '' ) );
 		}
 		return array( 'key' => $key, 'changed' => (bool) $result, 'exists' => metadata_exists( 'post', $post->ID, $key ), 'values' => get_post_meta( $post->ID, $key, false ) );
+	}
+
+	private static function can_write_meta( $cap, $post_id, $key ) {
+		$subtype_hook = 'auth_post_meta_' . $key . '_for_' . get_post_type( $post_id );
+		$hook = has_filter( $subtype_hook ) ? $subtype_hook : 'auth_post_meta_' . $key;
+		$current_user_id = get_current_user_id();
+		// Replace only the underscore-based default; existing auth and capability filters still decide.
+		$baseline = static function ( $allowed, $name, $object_id, $user_id, $requested_cap ) use ( $cap, $post_id, $key, $current_user_id ) {
+			return $name === $key && (int) $object_id === $post_id && (int) $user_id === $current_user_id && $requested_cap === $cap ? true : $allowed;
+		};
+		add_filter( $hook, $baseline, PHP_INT_MIN, 5 );
+		try { return current_user_can( $cap, $post_id, $key ); }
+		finally { remove_filter( $hook, $baseline, PHP_INT_MIN ); }
 	}
 
 	private static function validate_meta( $post_type, $key, $value, $write = true ) {
@@ -246,8 +272,7 @@ final class Guest_Key_Content_Abilities {
 			if ( '' === (string) $key ) { return self::invalid( 'Meta keys must be nonempty.' ); }
 			$valid = self::validate_meta( $type->name, $key, $value );
 			if ( is_wp_error( $valid ) ) { return $valid; }
-			if ( $post && ! current_user_can( 'edit_post_meta', $post->ID, $key ) ) { return self::denied(); }
-			if ( ! $post && is_protected_meta( $key, 'post' ) && ! isset( get_registered_meta_keys( 'post' )[ $key ] ) && ! isset( get_registered_meta_keys( 'post', $type->name )[ $key ] ) ) { return self::denied(); }
+			if ( $post && ! self::can_write_meta( 'edit_post_meta', $post->ID, $key ) ) { return self::denied(); }
 		}
 		foreach ( $input['terms'] ?? array() as $name => $ids ) {
 			$taxonomy = get_taxonomy( $name );

@@ -56,7 +56,7 @@ try {
 	$list = $call( 'manage-posts', array( 'action' => 'list', 'post_type' => 'gk_native_test', 'per_page' => 1 ) );
 	$assert( ! is_wp_error( $list ) && 1 === $list['total'] && $id === $list['items'][0]['ID'], 'List custom posts with pagination totals' );
 	$unknown = $call( 'manage-posts', array( 'action' => 'list', 'post_type' => 'gk_unknown_type' ) );
-	$assert( is_wp_error( $unknown ) && false !== strpos( $unknown->get_error_message(), 'post describe' ), 'Unknown post types point agents to discovery' );
+	$assert( is_wp_error( $unknown ) && false !== strpos( $unknown->get_error_message(), 'post describe' ) && isset( $unknown->get_error_data()['post_types']['gk_native_test'] ) && false !== strpos( $unknown->get_error_message(), 'gk_native_test' ), 'Unknown post types point agents to discovery' );
 	$assert( is_wp_error( $call( 'manage-posts', array( 'action' => 'create', 'post_type' => 'any', 'fields' => array( 'title' => 'Must not create' ) ) ) ), 'The any selector cannot create content without an explicit type' );
 	$other_author = wp_insert_user( array( 'user_login' => 'gk-list-' . wp_generate_password( 10, false ), 'user_pass' => wp_generate_password( 32 ), 'role' => 'editor' ) );
 	if ( is_wp_error( $other_author ) ) { throw new RuntimeException( 'Could not create the temporary list author.' ); }
@@ -130,13 +130,14 @@ try {
 	$assert( ! metadata_exists( 'post', $id, 'gk_multi' ), 'Omitting the deletion filter removes the requested post/key only' );
 	$fields = $call( 'manage-post-meta', array( 'action' => 'describe', 'post_id' => $id ) );
 	$assert( isset( $fields['gk_score'], $fields['_gk_data'] ) && false === $fields['gk_score']['registration']['show_in_rest'], 'Discover registered meta schemas and native authorization' );
-	update_post_meta( $id, '_gk_secret', 'Must stay hidden' );
-	update_post_meta( $id, 'gk_denied', 'Must stay hidden' );
-	foreach ( array( '_gk_secret', 'gk_denied', 'gk_readonly' ) as $key ) {
+	update_post_meta( $id, '_gk_secret', 'Readable with post edit access' );
+	update_post_meta( $id, 'gk_denied', 'Readable despite denied writes' );
+	$assert( ! is_wp_error( $call( 'manage-post-meta', array( 'action' => 'update', 'post_id' => $id, 'key' => '_gk_secret', 'value' => 'Editable with post edit access' ) ) ), 'Unregistered protected fields accept post-editor writes' );
+	foreach ( array( 'gk_denied', 'gk_readonly' ) as $key ) {
 		$assert( is_wp_error( $call( 'manage-post-meta', array( 'action' => 'update', 'post_id' => $id, 'key' => $key, 'value' => 'Must not save' ) ) ), 'Native authorization/readonly policy protects ' . $key );
 	}
 	$values = $call( 'manage-post-meta', array( 'action' => 'list', 'post_id' => $id ) );
-	$assert( ! isset( $values['_gk_secret'], $values['gk_denied'] ) && $data === $values['_gk_data'][0], 'Meta listing returns authorized values without disclosing denied keys' );
+	$assert( array( 'Editable with post edit access' ) === $values['_gk_secret'] && array( 'Readable despite denied writes' ) === $values['gk_denied'] && $data === $values['_gk_data'][0], 'Post editors read all stored metadata while declared write restrictions remain enforced' );
 	$rest_term = $call( 'manage-taxonomies', array( 'method' => 'POST', 'path' => '/gk-content-test/v1/topics', 'parameters' => array( 'name' => 'Guest Key REST topic' ) ) );
 	$assert( ! is_wp_error( $rest_term ) && 201 === $rest_term['status'], 'Existing REST taxonomy tooling supports custom namespaces and bases' );
 	$terms[] = array( $rest_term['data']['id'], 'gk_rest_group' );

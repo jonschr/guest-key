@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/user-license-fixture.php';
 /** wp --user=admin eval-file tests/multisite-http.php on a local subdirectory network. */
 if ( ! defined( 'WP_CLI' ) || ! WP_CLI || ! is_multisite() || is_subdomain_install() || ! in_array( wp_get_environment_type(), array( 'local', 'development' ), true ) || ! is_super_admin() || ! Guest_Key_Dependency::network() ) { throw new RuntimeException( 'Use a local/development subdirectory network with network-active Guest Key as a super administrator.' ); }
 require_once ABSPATH . 'wp-admin/includes/ms.php';
@@ -26,13 +27,13 @@ try {
 	if ( is_wp_error( $blog ) ) { throw new RuntimeException( $blog->get_error_message() ); }
 	$main_help = get_rest_url( $main, 'guest-key/v1/help' ); $sub_help = get_rest_url( $blog, 'guest-key/v1/help' );
 	wp_set_current_user( $users['ordinary'] );
-	$assert( ! Guest_Key_Access::administrator() && is_wp_error( Guest_Key_Access::create( $users['ordinary'] ) ), 'An ordinary multisite administrator cannot issue access' );
-	wp_set_current_user( $users['super'] ); $first = Guest_Key_Access::create( $users['super'] );
+	$assert( ! Guest_Key_Access::administrator() && is_wp_error( guest_key_test_entitled_create( $users['ordinary'] ) ), 'An ordinary multisite administrator cannot issue access' );
+	wp_set_current_user( $users['super'] ); $first = guest_key_test_entitled_create( $users['super'] );
 	$assert( ! is_wp_error( $first ), 'A super administrator can issue a main-site credential' );
 	$r = $http( $main_help, $first ); $assert( 200 === $r['status'], 'Main-site credentials reach main-site command help' );
-	$r = $http( $sub_help, $first ); $assert( 401 === $r['status'] && 'guest_key_scope' === $r['data']['code'], 'A main-site key cannot authenticate on a subsite' );
+	$r = $http( $sub_help, $first ); $assert( 401 === $r['status'] && 'guest_key_scope' === ( $r['data']['code'] ?? '' ), 'A main-site key cannot authenticate on a subsite (HTTP ' . $r['status'] . ', ' . ( $r['data']['code'] ?? 'no JSON error' ) . ')' );
 	switch_to_blog( $blog );
-	try { $second = Guest_Key_Access::create( $users['super'] ); $login = Guest_Key_Browser::url(); $sub_admin = admin_url(); }
+	try { $second = guest_key_test_entitled_create( $users['super'] ); $login = Guest_Key_Browser::url(); $sub_admin = admin_url(); }
 	finally { restore_current_blog(); }
 	$assert( ! is_wp_error( $second ) && (int) $blog === (int) Guest_Key_Access::grant( $users['super'] )['blog_id'], 'Issuing on a subsite binds the replacement key to that site' );
 	$r = $http( $sub_help, $second ); $assert( 200 === $r['status'], 'The replacement key reaches subsite command help' );
@@ -54,7 +55,7 @@ try {
 	switch_to_blog( $blog );
 	try {
 		get_userdata( $users['super'] )->set_role( 'subscriber' );
-		$assert( is_super_admin( $users['super'] ) && user_can( $users['super'], 'manage_options' ) && ! Guest_Key_Access::administrator( $users['super'] ) && is_wp_error( Guest_Key_Access::create( $users['super'] ) ), 'A super administrator must also have the administrator role on the issuing subsite' );
+		$assert( is_super_admin( $users['super'] ) && user_can( $users['super'], 'manage_options' ) && ! Guest_Key_Access::administrator( $users['super'] ) && is_wp_error( guest_key_test_entitled_create( $users['super'] ) ), 'A super administrator must also have the administrator role on the issuing subsite' );
 		$r = $http( $sub_help, $second ); $assert( 403 === $r['status'], 'Removing only the issuing-site administrator role ends network API access' );
 		$r = $http( $sub_admin, null, 'GET', array(), $cookies ); $assert( 302 === $r['status'], 'Removing the issuing-site administrator role ends its Guest Key browser session' );
 	} finally { get_userdata( $users['super'] )->set_role( 'administrator' ); restore_current_blog(); }

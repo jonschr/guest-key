@@ -45,6 +45,7 @@ function guest_key_http( $credential, $body, $session = '', $url = null ) {
 
 $original_uid = get_current_user_id();
 $other_grants = Guest_Key_Access::grants();
+require_once __DIR__ . '/user-license-fixture.php';
 $uid = wp_insert_user( array( 'user_login' => 'guest-key-test-' . wp_generate_password( 10, false ), 'user_pass' => wp_generate_password( 32 ), 'role' => 'administrator' ) );
 if ( is_wp_error( $uid ) ) {
 	throw new RuntimeException( 'Could not create the temporary integration-test account.' );
@@ -63,19 +64,19 @@ try {
 	guest_key_assert( count( $inventory ) >= 5 && false === wp_get_ability( 'guest-key-test/private-echo' )->get_meta_item( 'public' ), 'Inventory includes private abilities without changing their metadata' );
 	$deny = static function ( $caps ) { $caps['manage_options'] = false; return $caps; };
 	add_filter( 'user_has_cap', $deny );
-	guest_key_assert( is_wp_error( Guest_Key_Access::create( $uid ) ), 'Non-administrators cannot issue access' );
+	guest_key_assert( is_wp_error( guest_key_test_entitled_create( $uid ) ), 'Non-administrators cannot issue access' );
 	remove_filter( 'user_has_cap', $deny );
 	add_filter( 'wp_is_application_passwords_available_for_user', '__return_false' );
-	guest_key_assert( is_wp_error( Guest_Key_Access::create( $uid ) ), 'Disabled application-password policy is respected' );
+	guest_key_assert( is_wp_error( guest_key_test_entitled_create( $uid ) ), 'Disabled application-password policy is respected' );
 	remove_filter( 'wp_is_application_passwords_available_for_user', '__return_false' );
 	$regular = WP_Application_Passwords::create_new_application_password( $uid, array( 'name' => 'Guest Key unrelated-password test' ) );
 	guest_key_assert( ! is_wp_error( $regular ), 'Create an unrelated credential for isolation testing' );
-	$first = Guest_Key_Access::create( $uid );
+	$first = guest_key_test_entitled_create( $uid );
 	guest_key_assert( ! is_wp_error( $first ), 'Issue temporary access' );
 	$first_grant = Guest_Key_Access::grant( $uid );
 	guest_key_assert( abs( $first_grant['expires'] - time() - 7200 ) <= 2, 'Credential expires after two hours' );
 	guest_key_assert( false !== wp_next_scheduled( Guest_Key_Access::CRON, array( $uid, $first_grant['uuid'] ) ), 'Schedule cleanup for the issued UUID' );
-	$second = Guest_Key_Access::create( $uid );
+	$second = guest_key_test_entitled_create( $uid );
 	guest_key_assert( ! is_wp_error( $second ) && $first['password'] !== $second['password'], 'A second click creates a fresh credential' );
 	$second_grant = Guest_Key_Access::grant( $uid );
 	$items = WP_Application_Passwords::get_user_application_passwords( $uid );
@@ -114,14 +115,14 @@ try {
 	$needed = array_filter( $other_grants, static function ( $grant ) { return $grant['expires'] > time() && (int) $grant['blog_id'] === get_current_blog_id(); } );
 	guest_key_assert( ( ! Guest_Key_Dependency::managed() || (bool) $needed ) === is_plugin_active( Guest_Key_Dependency::PLUGIN ), 'Expiry preserves independently managed adapters and active grants' );
 	guest_key_assert( null !== WP_Application_Passwords::get_user_application_password( $uid, $regular[1]['uuid'] ), 'Unrelated application passwords survive rotation and expiry' );
-	$third = Guest_Key_Access::create( $uid );
+	$third = guest_key_test_entitled_create( $uid );
 	guest_key_assert( ! is_wp_error( $third ) && is_plugin_active( Guest_Key_Dependency::PLUGIN ), 'Creating access re-enables the adapter' );
 	delete_option( 'guest_key_adapter_managed' );
 	Guest_Key_Access::revoke( $uid );
 	guest_key_assert( is_plugin_active( Guest_Key_Dependency::PLUGIN ), 'Revocation preserves an independently managed adapter' );
 	update_option( 'guest_key_adapter_managed', true, false );
 	if ( ! $other_grants ) {
-		$fourth = Guest_Key_Access::create( $uid );
+		$fourth = guest_key_test_entitled_create( $uid );
 		guest_key_assert( ! is_wp_error( $fourth ), 'Create a credential for deactivation testing' );
 		deactivate_plugins( plugin_basename( GUEST_KEY_FILE ) );
 		guest_key_assert( ! Guest_Key_Access::grant( $uid ), 'Plugin deactivation revokes temporary credentials' );

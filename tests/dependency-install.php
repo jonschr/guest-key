@@ -17,7 +17,7 @@ add_filter( 'request_filesystem_credentials', '__return_false' );
 add_filter( 'pre_http_request', $block_http );
 try {
 	$error = Guest_Key_Dependency::ensure( false );
-	$assert( is_wp_error( $error ) && 'guest_key_install' === $error->get_error_code(), 'Missing filesystem credentials return a setup error instead of an undefined-method exception' );
+	$assert( is_wp_error( $error ) && 'guest_key_install' === $error->get_error_code(), 'Missing filesystem credentials return a setup error instead of an undefined-method exception (received ' . ( is_wp_error( $error ) ? $error->get_error_code() : gettype( $error ) ) . ')' );
 	$assert( false !== strpos( $error->get_error_message(), 'FTP/SSH' ), 'The setup error explains configured filesystem credentials' );
 	$assert( ! file_exists( WP_PLUGIN_DIR . '/mcp-adapter' ) && 0 === $requests, 'The failure test installs nothing and makes no HTTP requests' );
 	$skin = new WP_Ajax_Upgrader_Skin();

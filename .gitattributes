@@ -2,3 +2,4 @@
 /.gitattributes export-ignore
 
 /TESTING-LICENSING.md export-ignore
+/AGENTS.md export-ignore

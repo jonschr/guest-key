@@ -32,6 +32,14 @@ final class Guest_Key_Files {
 		return array( 'type' => 'string', 'maxLength' => 1024, 'description' => 'Path relative to wp-content, e.g. plugins/example/includes. Omit for the content root when listing/searching. No absolute paths or dot segments.' );
 	}
 
+	public static function cursor_schema() {
+		return array( 'type' => 'string', 'maxLength' => 65536, 'description' => 'Opaque next_cursor from the previous response. Repeat the same filters; limit may change. Resumes after result, byte, entry or time limits without rescanning completed files. Expires after one hour; scoped to this user and site.' );
+	}
+
+	public static function depth_schema() {
+		return array( 'type' => 'integer', 'minimum' => 1, 'maximum' => self::MAX_DEPTH + 1, 'description' => 'Maximum directory levels to inspect: 1 lists/searches only immediate children, 2 includes their children. Overrides recursive for listing. Default: 1 for listing, 21 with recursive=true or search.' );
+	}
+
 	private static function error( $code, $message, $status = 400 ) { return new WP_Error( 'guest_key_file_' . $code, $message, array( 'status' => $status ) ); }
 
 	private static function excluded( $path ) {
@@ -104,26 +112,53 @@ final class Guest_Key_Files {
 		return null === $state['limited'] && 0 === $state['skipped']['unreadable'] && 0 === $state['skipped']['size'] && 0 === $state['skipped']['depth'] && 0 === $state['skipped']['symlink'];
 	}
 
-	private static function walk( $path, $recursive, &$state, $deadline ) {
-		$stack = array( array( rtrim( $path, '/' ), 0 ) );
-		while ( $stack ) {
-			list( $directory, $depth ) = array_pop( $stack );
+	private static function checkpoint( $input, $mode ) {
+		$options = array_merge( 'list' === $mode ? array( 'path' => '', 'recursive' => false, 'offset' => 0 ) : array( 'path' => '', 'case_sensitive' => false, 'offset' => 0 ), $input );
+		unset( $options['cursor'], $options['limit'] ); ksort( $options );
+		$context = hash( 'sha256', $mode . ':' . get_current_blog_id() . ':' . get_current_user_id() . ':' . wp_json_encode( $options ) );
+		if ( empty( $input['cursor'] ) ) {
+			return array( 'context' => $context, 'expires' => time() + HOUR_IN_SECONDS, 'stack' => array( array( rtrim( $input['path'] ?? '', '/' ), 0, 0 ) ), 'skip' => (int) ( $input['offset'] ?? 0 ) );
+		}
+		$parts = explode( '.', $input['cursor'], 2 );
+		if ( 2 !== count( $parts ) || ! hash_equals( hash_hmac( 'sha256', $parts[0], wp_salt( 'auth' ) ), $parts[1] ) ) { return self::error( 'cursor', 'Invalid scan cursor. Start a new scan.' ); }
+		$checkpoint = json_decode( base64_decode( $parts[0], true ), true );
+		if ( ! is_array( $checkpoint ) || ( $checkpoint['context'] ?? '' ) !== $context || ( $checkpoint['expires'] ?? 0 ) <= time() ) { return self::error( 'cursor', 'Scan cursor expired or belongs to different filters, user or site. Start a new scan.' ); }
+		return $checkpoint;
+	}
+
+	private static function cursor( $checkpoint, $state ) {
+		if ( null === $state['limited'] ) { return null; }
+		$payload = base64_encode( wp_json_encode( $checkpoint ) );
+		return $payload . '.' . hash_hmac( 'sha256', $payload, wp_salt( 'auth' ) );
+	}
+
+	private static function walk( &$checkpoint, $max_depth, &$state, $deadline ) {
+		while ( $checkpoint['stack'] ) {
+			$frame = count( $checkpoint['stack'] ) - 1;
+			list( $directory, $depth, $index ) = $checkpoint['stack'][ $frame ];
 			$absolute = self::resolve( $directory );
-			if ( is_wp_error( $absolute ) || ! is_dir( $absolute ) ) { $state['skipped']['unreadable']++; continue; }
-			try { $iterator = new FilesystemIterator( $absolute, FilesystemIterator::SKIP_DOTS ); }
-			catch ( UnexpectedValueException $error ) { $state['skipped']['unreadable']++; continue; }
-			foreach ( $iterator as $entry ) {
+			if ( is_wp_error( $absolute ) || ! is_dir( $absolute ) || is_link( WP_CONTENT_DIR . '/' . $directory ) ) { array_pop( $checkpoint['stack'] ); $state['skipped']['unreadable']++; continue; }
+			try {
+				$iterator = new FilesystemIterator( $absolute, FilesystemIterator::SKIP_DOTS );
+				if ( $index ) { $iterator->seek( $index ); }
+			} catch ( OutOfBoundsException $error ) { array_pop( $checkpoint['stack'] ); continue; }
+			catch ( UnexpectedValueException $error ) { array_pop( $checkpoint['stack'] ); $state['skipped']['unreadable']++; continue; }
+			while ( $iterator->valid() ) {
 				if ( microtime( true ) >= $deadline ) { $state['limited'] = 'time'; return; }
 				if ( $state['entries_scanned'] >= self::MAX_ENTRIES ) { $state['limited'] = 'entries'; return; }
+				$entry = $iterator->current();
 				$state['entries_scanned']++;
 				$relative = ( '' === $directory ? '' : $directory . '/' ) . $entry->getFilename();
+				$checkpoint['stack'][ $frame ][2] = ++$index;
+				$iterator->next();
 				if ( self::excluded( $relative ) ) { $state['skipped']['excluded']++; continue; }
+				$descend = ! $entry->isLink() && $entry->isDir() && $depth + 1 < $max_depth;
+				if ( $descend ) { $checkpoint['stack'][] = array( $relative, $depth + 1, 0 ); }
+				elseif ( ! $entry->isLink() && $entry->isDir() && self::MAX_DEPTH + 1 === $max_depth ) { $state['skipped']['depth']++; }
 				yield array( $relative, $entry );
-				if ( $recursive && ! $entry->isLink() && $entry->isDir() ) {
-					if ( $depth >= self::MAX_DEPTH ) { $state['skipped']['depth']++; }
-					else { $stack[] = array( $relative, $depth + 1 ); }
-				}
+				if ( $descend ) { continue 2; }
 			}
+			array_pop( $checkpoint['stack'] );
 		}
 	}
 
@@ -133,11 +168,14 @@ final class Guest_Key_Files {
 		if ( is_wp_error( $absolute ) ) { return $absolute; }
 		if ( ! is_dir( $absolute ) || ! is_readable( $absolute ) ) { return self::error( 'directory', 'Choose a readable directory.', 400 ); }
 		$offset = (int) ( $input['offset'] ?? 0 ); $limit = (int) ( $input['limit'] ?? 100 );
-		$state = self::state(); $items = array(); $position = 0;
-		foreach ( self::walk( $path, rest_sanitize_boolean( $input['recursive'] ?? false ), $state, microtime( true ) + self::SCAN_SECONDS ) as $item ) {
+		$checkpoint = self::checkpoint( $input, 'list' );
+		if ( is_wp_error( $checkpoint ) ) { return $checkpoint; }
+		$state = self::state(); $items = array();
+		$depth = $input['depth'] ?? ( rest_sanitize_boolean( $input['recursive'] ?? false ) ? self::MAX_DEPTH + 1 : 1 );
+		foreach ( self::walk( $checkpoint, $depth, $state, microtime( true ) + self::SCAN_SECONDS ) as $item ) {
 			list( $relative, $entry ) = $item;
 			if ( isset( $input['search'] ) && false === stripos( $entry->getFilename(), $input['search'] ) ) { continue; }
-			if ( $position++ < $offset ) { continue; }
+			if ( $checkpoint['skip'] > 0 ) { $checkpoint['skip']--; continue; }
 			$resolved = self::resolve( $relative );
 			$row = array( 'path' => $relative, 'type' => $entry->isLink() ? 'symlink' : ( $entry->isDir() ? 'directory' : ( $entry->isFile() ? 'file' : 'other' ) ), 'readable' => ! is_wp_error( $resolved ) && is_readable( $resolved ) );
 			if ( ! $entry->isLink() && $entry->isFile() ) {
@@ -147,17 +185,18 @@ final class Guest_Key_Files {
 			$items[] = $row;
 			if ( count( $items ) >= $limit ) { $state['limited'] = 'results'; break; }
 		}
-		return array( 'path' => $path, 'items' => $items, 'next_offset' => 'results' === $state['limited'] ? $offset + count( $items ) : null, 'complete' => self::complete( $state ), 'scan' => $state );
+		return array( 'path' => $path, 'items' => $items, 'next_offset' => 'results' === $state['limited'] && empty( $input['cursor'] ) ? $offset + count( $items ) : null, 'next_cursor' => self::cursor( $checkpoint, $state ), 'complete' => self::complete( $state ), 'scan' => $state );
 	}
 
-	private static function lines( $text ) {
-		$offset = 0; $number = 1; $size = strlen( $text );
+	private static function lines( $text, $offset = 0, $number = 1 ) {
+		$size = strlen( $text );
 		while ( $offset < $size ) {
 			$length = strcspn( $text, "\r\n", $offset );
-			yield array( $number++, $offset, substr( $text, $offset, $length ) );
+			$start = $offset;
 			$offset += $length;
 			if ( $offset < $size && "\r" === $text[ $offset ] && $offset + 1 < $size && "\n" === $text[ $offset + 1 ] ) { $offset += 2; }
 			elseif ( $offset < $size ) { $offset++; }
+			yield array( $number++, $start, substr( $text, $start, $length ), $offset );
 		}
 	}
 
@@ -166,35 +205,54 @@ final class Guest_Key_Files {
 		$absolute = self::resolve( $path );
 		if ( is_wp_error( $absolute ) ) { return $absolute; }
 		if ( ! is_dir( $absolute ) || ! is_readable( $absolute ) ) { return self::error( 'directory', 'Choose a readable search directory.', 400 ); }
-		$state = self::state(); $matches = array(); $position = 0;
+		$checkpoint = self::checkpoint( $input, 'search' );
+		if ( is_wp_error( $checkpoint ) ) { return $checkpoint; }
+		$state = self::state(); $matches = array();
 		$offset = (int) ( $input['offset'] ?? 0 ); $limit = (int) ( $input['limit'] ?? 30 );
 		$case_sensitive = rest_sanitize_boolean( $input['case_sensitive'] ?? false );
 		$deadline = microtime( true ) + self::SCAN_SECONDS;
-		foreach ( self::walk( $path, true, $state, $deadline ) as $item ) {
+		$pending = $checkpoint['file'] ?? null;
+		$files = static function () use ( &$checkpoint, &$state, $deadline, $input, $pending ) {
+			if ( $pending ) {
+				$resolved = self::resolve( $pending[0] );
+				if ( ! is_wp_error( $resolved ) ) { yield array( $pending[0], new SplFileInfo( WP_CONTENT_DIR . '/' . $pending[0] ) ); }
+				else { $state['skipped']['unreadable']++; }
+			}
+			unset( $checkpoint['file'] );
+			yield from self::walk( $checkpoint, $input['depth'] ?? self::MAX_DEPTH + 1, $state, $deadline );
+		};
+		foreach ( $files() as $item ) {
 			list( $relative, $entry ) = $item;
+			$resume = $pending && $pending[0] === $relative ? $pending : array( $relative, 0, 1 );
+			unset( $checkpoint['file'] );
+			$pending = null;
 			if ( $entry->isLink() ) { $state['skipped']['symlink']++; continue; }
 			if ( ! $entry->isFile() || ( isset( $input['filename'] ) && ! fnmatch( $input['filename'], $entry->getFilename() ) ) ) { continue; }
 			try { $size = $entry->getSize(); }
 			catch ( RuntimeException $error ) { $state['skipped']['unreadable']++; continue; }
 			if ( $size > self::MAX_FILE_BYTES ) { $state['skipped']['size']++; continue; }
+			$checkpoint['file'] = $resume;
 			if ( $state['bytes_scanned'] + $size > self::MAX_SCAN_BYTES ) { $state['limited'] = 'bytes'; break; }
 			$text = self::text( $relative );
 			$state['files_scanned']++; $state['bytes_scanned'] += is_wp_error( $text ) ? $size : strlen( $text );
 			if ( $state['bytes_scanned'] > self::MAX_SCAN_BYTES ) { $state['limited'] = 'bytes'; break; }
 			if ( is_wp_error( $text ) ) {
 				$reason = substr( $text->get_error_code(), strlen( 'guest_key_file_' ) );
-				$state['skipped'][ isset( $state['skipped'][ $reason ] ) ? $reason : 'unreadable' ]++; continue;
+				$state['skipped'][ isset( $state['skipped'][ $reason ] ) ? $reason : 'unreadable' ]++; unset( $checkpoint['file'] ); continue;
 			}
-			foreach ( self::lines( $text ) as $line ) {
+			foreach ( self::lines( $text, $checkpoint['file'][1], $checkpoint['file'][2] ) as $line ) {
 				if ( microtime( true ) >= $deadline ) { $state['limited'] = 'time'; break 2; }
-				list( $number, $line_offset, $content ) = $line;
+				list( $number, $line_offset, $content, $next ) = $line;
+				$checkpoint['file'] = array( $relative, $next, $number + 1 );
 				$match = $case_sensitive ? strpos( $content, $input['query'] ) : stripos( $content, $input['query'] );
-				if ( false === $match || $position++ < $offset ) { continue; }
+				if ( false === $match ) { continue; }
+				if ( $checkpoint['skip'] > 0 ) { $checkpoint['skip']--; continue; }
 				list( $start, $snippet ) = self::slice( $content, max( 0, $match - 120 ), 600 );
 				$matches[] = array( 'path' => $relative, 'line' => $number, 'offset' => $line_offset + $match, 'line_offset' => $line_offset, 'text' => $snippet, 'truncated' => 0 !== $start || strlen( $snippet ) < strlen( $content ) );
 				if ( count( $matches ) >= $limit ) { $state['limited'] = 'results'; break 2; }
 			}
+			unset( $checkpoint['file'] );
 		}
-		return array( 'path' => $path, 'matches' => $matches, 'next_offset' => 'results' === $state['limited'] ? $offset + count( $matches ) : null, 'complete' => self::complete( $state ), 'scan' => $state );
+		return array( 'path' => $path, 'matches' => $matches, 'next_offset' => 'results' === $state['limited'] && empty( $input['cursor'] ) ? $offset + count( $matches ) : null, 'next_cursor' => self::cursor( $checkpoint, $state ), 'complete' => self::complete( $state ), 'scan' => $state );
 	}
 }
