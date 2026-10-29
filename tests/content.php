@@ -7,7 +7,7 @@ error_reporting( E_ALL & ~E_DEPRECATED );
 foreach ( array( 'gk_native_test', 'gk_rest_test' ) as $name ) {
 	if ( post_type_exists( $name ) ) { throw new RuntimeException( 'A fixture type already exists; refusing to replace it.' ); }
 	register_post_type( $name, array( 'label' => 'Guest Key content test', 'public' => false, 'show_in_rest' => 'gk_rest_test' === $name,
-		'rest_namespace' => 'gk-content-test/v1', 'rest_base' => 'articles', 'supports' => array( 'title', 'editor', 'custom-fields', 'revisions' ), 'map_meta_cap' => true ) );
+		'rest_namespace' => 'gk-content-test/v1', 'rest_base' => 'articles', 'supports' => array( 'title', 'editor', 'custom-fields', 'revisions' ), 'map_meta_cap' => true, 'capability_type' => 'gk_rest_test' === $name ? 'page' : 'post' ) );
 }
 foreach ( array( 'gk_native_group', 'gk_rest_group' ) as $name ) {
 	if ( taxonomy_exists( $name ) ) { throw new RuntimeException( 'A fixture taxonomy already exists; refusing to replace it.' ); }
@@ -23,6 +23,9 @@ register_post_meta( 'gk_native_test', 'gk_readonly', array( 'type' => 'string', 
 register_post_meta( 'gk_rest_test', 'gk_score', array( 'type' => 'integer', 'single' => true, 'auth_callback' => $auth, 'show_in_rest' => true ) );
 $checks = 0;
 $posts = $terms = array();
+$other_author = null;
+$restrict_authors = static function ( $caps ) { $caps['edit_others_posts'] = false; return $caps; };
+$deny_pages = static function ( $caps ) { $caps['edit_pages'] = false; return $caps; };
 $grants = Guest_Key_Access::grants();
 $uid = get_current_user_id();
 $hook_calls = 0;
@@ -52,6 +55,33 @@ try {
 	$assert( ! is_wp_error( $updated ) && 'publish' === get_post_status( $id ) && 'Guest Key updated fixture' === $updated['post_title'], 'Edit and publish a non-REST custom post' );
 	$list = $call( 'manage-posts', array( 'action' => 'list', 'post_type' => 'gk_native_test', 'per_page' => 1 ) );
 	$assert( ! is_wp_error( $list ) && 1 === $list['total'] && $id === $list['items'][0]['ID'], 'List custom posts with pagination totals' );
+	$unknown = $call( 'manage-posts', array( 'action' => 'list', 'post_type' => 'gk_unknown_type' ) );
+	$assert( is_wp_error( $unknown ) && false !== strpos( $unknown->get_error_message(), 'post describe' ), 'Unknown post types point agents to discovery' );
+	$assert( is_wp_error( $call( 'manage-posts', array( 'action' => 'create', 'post_type' => 'any', 'fields' => array( 'title' => 'Must not create' ) ) ) ), 'The any selector cannot create content without an explicit type' );
+	$other_author = wp_insert_user( array( 'user_login' => 'gk-list-' . wp_generate_password( 10, false ), 'user_pass' => wp_generate_password( 32 ), 'role' => 'editor' ) );
+	if ( is_wp_error( $other_author ) ) { throw new RuntimeException( 'Could not create the temporary list author.' ); }
+	$needle = 'GuestKeyAny' . wp_generate_password( 12, false );
+	$any_ids = array();
+	foreach ( array( array( 'gk_native_test', $uid ), array( 'gk_native_test', $other_author ), array( 'gk_rest_test', $other_author ) ) as $fixture ) {
+		$fixture_id = wp_insert_post( array( 'post_type' => $fixture[0], 'post_author' => $fixture[1], 'post_status' => 'draft', 'post_title' => $needle ), true );
+		if ( is_wp_error( $fixture_id ) ) { throw new RuntimeException( 'Could not create a list fixture.' ); }
+		$posts[] = $fixture_id; $any_ids[] = $fixture_id;
+	}
+	$list = $call( 'manage-posts', array( 'action' => 'list', 'post_type' => 'any', 'search' => $needle, 'per_page' => 2 ) );
+	$assert( ! is_wp_error( $list ) && 3 === $list['total'] && 2 === $list['total_pages'] && array_slice( $any_ids, 0, 2 ) === array_column( $list['items'], 'ID' ), 'Any searches both custom types despite exclude_from_search and absent REST exposure' );
+	add_filter( 'user_has_cap', $restrict_authors );
+	try {
+		$page1 = $call( 'manage-posts', array( 'action' => 'list', 'post_type' => 'any', 'search' => $needle, 'per_page' => 1 ) );
+		$page2 = $call( 'manage-posts', array( 'action' => 'list', 'post_type' => 'any', 'search' => $needle, 'per_page' => 1, 'page' => 2 ) );
+		$assert( 2 === $page1['total'] && 2 === $page1['total_pages'] && $any_ids[0] === $page1['items'][0]['ID'] && $any_ids[2] === $page2['items'][0]['ID'], 'Mixed-type author restrictions apply before global pagination and totals' );
+		add_filter( 'user_has_cap', $deny_pages );
+		try {
+			$list = $call( 'manage-posts', array( 'action' => 'list', 'post_type' => 'any', 'search' => $needle ) );
+			$assert( 1 === $list['total'] && array( $any_ids[0] ) === array_column( $list['items'], 'ID' ), 'Any excludes types the administrator cannot edit' );
+		} finally { remove_filter( 'user_has_cap', $deny_pages ); }
+	} finally { remove_filter( 'user_has_cap', $restrict_authors ); }
+	$unrestricted = new WP_Query( array( 'post_type' => array( 'gk_native_test', 'gk_rest_test' ), 'post_status' => 'draft', 's' => $needle ) );
+	$assert( 3 === $unrestricted->found_posts, 'List author filtering does not leak into later WordPress queries' );
 	$assert( is_wp_error( $call( 'manage-posts', array( 'action' => 'get' ) ) ), 'Item operations require an explicit post ID' );
 	$assert( is_wp_error( $call( 'manage-posts', array( 'action' => 'update', 'id' => $id, 'fields' => array( 'status' => 'not-a-status' ) ) ) ), 'Reject unregistered post statuses' );
 	$term = $call( 'manage-terms', array( 'action' => 'create', 'taxonomy' => 'gk_native_group', 'fields' => array( 'name' => 'Guest Key C:\\group "one"' ) ) );
@@ -142,8 +172,11 @@ try {
 	$assert( 2 === count( $guest_server['details']['tools'] ) && isset( $guest_server['details']['tools']['guest-key-help'], $guest_server['details']['tools']['guest-key-run'] ), 'MCP exposes only command help and execution' );
 } finally {
 	remove_filter( 'user_has_cap', $deny );
+	remove_filter( 'user_has_cap', $restrict_authors );
+	remove_filter( 'user_has_cap', $deny_pages );
 	wp_set_current_user( $uid );
 	foreach ( $posts as $id ) { if ( get_post( $id ) ) { wp_delete_post( $id, true ); } }
+	if ( $other_author && ! is_wp_error( $other_author ) ) { require_once ABSPATH . 'wp-admin/includes/user.php'; wp_delete_user( $other_author ); }
 	foreach ( array_reverse( $terms ) as $term ) { wp_delete_term( $term[0], $term[1] ); }
 	remove_action( 'save_post_gk_native_test', $save_hook );
 	foreach ( array( 'gk_native_group', 'gk_rest_group' ) as $name ) { unregister_taxonomy( $name ); }

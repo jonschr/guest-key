@@ -3,13 +3,13 @@
 if ( ! defined( 'WP_CLI' ) || ! WP_CLI || is_multisite() || ! in_array( wp_get_environment_type(), array( 'local', 'development' ), true ) ) { throw new RuntimeException( 'Use an isolated local single site.' ); }
 error_reporting( E_ALL & ~E_DEPRECATED );
 $original = get_option( Guest_Key_License::OPTION, null ); $pending = get_option( Guest_Key_License::PENDING, null );
-$checks = 0; $calls = array(); $keys = array(); $offline = false; $wrong = false; $mode = 'valid';
+$checks = 0; $calls = array(); $keys = array(); $offline = false; $wrong = false; $mode = 'valid'; $trial_days = 3;
 $assert = static function ( $ok, $message ) use ( &$checks ) { if ( ! $ok ) { throw new RuntimeException( $message ); } $checks++; echo "PASS: {$message}\n"; };
-$mock = static function ( $pre, $args, $url ) use ( &$calls, &$keys, &$offline, &$wrong, &$mode ) {
+$mock = static function ( $pre, $args, $url ) use ( &$calls, &$keys, &$offline, &$wrong, &$mode, &$trial_days ) {
 	if ( false === strpos( $url, '/v1/licenses/' ) && false === strpos( $url, '/v1/trials/' ) ) { return $pre; }
 	$calls[] = $url;
 	if ( false !== strpos( $url, '/v1/licenses/claim' ) ) { $data = array( 'licenses' => $keys ); if ( $offline ) { return new WP_Error( 'fixture_offline', 'Connector offline.' ); } }
-	elseif ( false !== strpos( $url, '/v1/trials/start' ) ) { $data = array( 'trial_token' => str_repeat( 't', 43 ), 'status' => 'active', 'expires_at' => gmdate( 'c', time() + DAY_IN_SECONDS ) ); }
+	elseif ( false !== strpos( $url, '/v1/trials/start' ) ) { $data = array( 'trial_token' => str_repeat( 't', 43 ), 'status' => 'active', 'expires_at' => gmdate( 'c', time() + $trial_days * DAY_IN_SECONDS ) ); }
 	elseif ( false !== strpos( $url, '/v1/trials/status' ) ) { $data = array( 'status' => 'active', 'expires_at' => gmdate( 'c', time() + HOUR_IN_SECONDS ) ); }
 	else { $data = array( 'valid' => 'invalid' !== $mode, 'activated' => 'limit' !== $mode, 'deactivated' => true, 'license_key' => array( 'expires_at' => null ), 'instance' => array( 'id' => 'fixture-auto-instance' ), 'meta' => array( 'product_id' => $wrong ? 999 : 1457777, 'variant_id' => 2274395 ) ); }
 	return array( 'response' => array( 'code' => 200 ), 'headers' => array(), 'body' => wp_json_encode( $data ) );
@@ -44,6 +44,10 @@ try {
 	Guest_Key_License::active_until(); $assert( ! $calls, 'Native authentication still performs no network requests' );
 	update_option( Guest_Key_License::PENDING, array( 'email' => 'verified@example.com', 'site' => $trial['site'], 'until' => time() + 60, 'challenge' => 'fixture' ), false );
 	$assert( true === Guest_Key_License::verify( '123456' ) && 'verified@example.com' === Guest_Key_License::view()['email'], 'Completed email verification retains the address for purchase guidance' );
+	$assert( get_option( Guest_Key_License::OPTION )['expires'] >= time() + 3 * DAY_IN_SECONDS - 5, 'Verified trials retain the full three-day expiration' );
+	$trial_days = 4;
+	update_option( Guest_Key_License::PENDING, array( 'email' => 'verified@example.com', 'site' => $trial['site'], 'until' => time() + 60, 'challenge' => 'fixture' ), false );
+	$assert( is_wp_error( Guest_Key_License::verify( '123456' ) ), 'Trials exceeding three days are rejected' );
 	$assert( ! array_key_exists( Guest_Key_License::OPTION, wp_load_alloptions() ), 'Saved licensing credentials are not autoloaded' );
 } finally {
 	remove_filter( 'pre_http_request', $mock, 10 );

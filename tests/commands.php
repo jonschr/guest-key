@@ -38,7 +38,11 @@ try {
 	register_post_meta( 'gk_command_portfolio', '_gk_details', array( 'type' => 'object', 'single' => true, 'auth_callback' => '__return_true' ) );
 	register_post_meta( 'gk_command_portfolio', 'gk_denied', array( 'type' => 'string', 'auth_callback' => '__return_false' ) );
 	$help = wp_get_ability( 'guest-key/help' )->execute( array() );
-	$assert( in_array( 'post save', $help['commands'], true ) && ! isset( $help['input_schema'] ), 'Default help lists only compact command names' );
+	$assert( in_array( 'post save', $help['commands'], true ) && ! isset( $help['input_schema'] ), 'Default help lists compact command names without full schemas' );
+	$assert( isset( $help['post_types']['gk_command_portfolio'] ) && 'Command test portfolio' === $help['post_types']['gk_command_portfolio'], 'Default help includes the exact dynamically registered post type names and labels' );
+	$post_help = wp_get_ability( 'guest-key/help' )->execute( array( 'command' => 'post' ) );
+	$list_help = wp_get_ability( 'guest-key/help' )->execute( array( 'command' => 'post list' ) );
+	$assert( isset( $post_help['post_types']['gk_command_portfolio'], $list_help['post_types']['gk_command_portfolio'] ) && false !== strpos( $list_help['input_schema']['properties']['post_type']['description'], 'any' ), 'Post prefix and focused help expose type names and cross-type search guidance' );
 	$help = wp_get_ability( 'guest-key/help' )->execute( array( 'command' => 'post meta update' ) );
 	$assert( ! isset( $help['input_schema']['properties']['action'] ) && isset( $help['input_schema']['properties']['value'] ), 'Focused help returns the existing input schema without a redundant action' );
 	$help = wp_get_ability( 'guest-key/help' )->execute( array( 'command' => array( 'plugin install', 'post save', 'post meta describe' ) ) );
@@ -82,6 +86,10 @@ try {
 	$assert( ! isset( $batch['results'][2]['data']['post_content'] ), 'Write results return IDs without echoing large content' );
 	$list = $run( array( array( 'command' => 'post list', 'input' => array( 'post_type' => 'gk_command_portfolio' ) ) ) );
 	$assert( $list['ok'] && $id === $list['results'][0]['data']['items'][0]['id'] && ! isset( $list['results'][0]['data']['items'][0]['post_content'] ), 'Post lists retain pagination and IDs without loading each content body' );
+	$across = $run( array( array( 'command' => 'post list', 'input' => array( 'post_type' => 'any', 'search' => 'Command portfolio' ) ) ) );
+	$assert( $across['ok'] && in_array( $id, array_column( $across['results'][0]['data']['items'], 'id' ), true ), 'The command dispatcher supports cross-type search for a non-REST custom post' );
+	$unknown = $run( array( array( 'command' => 'post list', 'input' => array( 'post_type' => 'gk_unknown_type' ) ), array( 'command' => 'post describe' ) ) );
+	$assert( ! $unknown['ok'] && 0 === $unknown['failed_index'] && 1 === $unknown['skipped'] && false !== strpos( $unknown['error']['message'], 'post describe' ), 'Invalid types retain the batch failure contract and provide discovery guidance' );
 	$updated = $run( array( array( 'command' => 'post save', 'input' => array( 'id' => $id, 'meta' => array( 'gk_score' => 43 ), 'terms' => array( 'gk_command_kind' => array() ), 'featured_media' => 0 ) ) ) );
 	$assert( $updated['ok'] && 43 === (int) get_post_meta( $id, 'gk_score', true ) && ! get_post_thumbnail_id( $id ) && ! wp_get_object_terms( $id, 'gk_command_kind' ), 'Update metadata without fields, clear terms and featured image' );
 	$failed = $run( array(
@@ -120,6 +128,7 @@ try {
 	$assert( false !== strpos( $key['bundle'], 'Commands: GET ' ) && false !== strpos( $key['bundle'], 'run design guide' ), 'Copied connection bundle teaches commands and design guide discovery' );
 	$response = $http( 'GET', 'help', $key );
 	$assert( 200 === $response['status'] && in_array( 'post save', $response['data']['commands'], true ), 'Native Basic authentication reaches command help over HTTP' );
+	$assert( isset( $response['data']['post_types']['post'], $response['data']['post_types']['page'] ), 'Authenticated REST help includes the site’s registered type names' );
 	$response = $http( 'GET', 'help', $key, null, add_query_arg( array( 'rest_route' => '/guest-key/v1/help', 'command' => 'post save' ), home_url( '/' ) ) );
 	$assert( 200 === $response['status'] && 'post save' === $response['data']['command'], 'Plain-permalink command URLs ignore the REST transport parameter while preserving help input' );
 	$response = $http( 'OPTIONS', 'run', $key );
@@ -139,6 +148,9 @@ try {
 	if ( isset( $response['data']['results'][0]['data']['id'] ) ) { $posts[] = $response['data']['results'][0]['data']['id']; }
 	$assert( 200 === $response['status'] && $response['data']['ok'] && 'HTTP command draft' === $response['data']['results'][1]['data']['post_title'], 'Create and verify content through one authenticated HTTP command batch' );
 	$assert( array( 'label' => 'HTTP "quotes"' ) === get_post_meta( end( $posts ), 'gk_http_value', true ), 'HTTP command batch persists structured metadata' );
+	$response = $http( 'POST', 'run', $key, array( 'commands' => array( array( 'command' => 'post list', 'input' => array( 'post_type' => 'any', 'search' => 'HTTP command draft' ) ) ) ) );
+	$assert( 200 === $response['status'] && $response['data']['ok'] && in_array( end( $posts ), array_column( $response['data']['results'][0]['data']['items'], 'id' ), true ), 'Authenticated REST post list accepts any and returns the matching draft' );
+
 	$response = $http( 'POST', 'run', $key, array( 'commands' => array( array( 'command' => 'rest request', 'input' => array( 'method' => 'POST', 'path' => '/wp/v2/users/me/application-passwords', 'parameters' => array( 'name' => 'Denied' ) ) ) ) ) );
 	$assert( ! $response['data']['ok'], 'Generic REST commands cannot issue durable credentials' );
 	$response = $http( 'GET', 'help' );

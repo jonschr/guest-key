@@ -42,7 +42,7 @@ final class Guest_Key_Commands {
 
 	public static function help_schema() {
 		return array( 'type' => 'object', 'properties' => array(
-			'command' => array( 'type' => array( 'string', 'array' ), 'items' => array( 'type' => 'string' ), 'maxItems' => 20, 'description' => 'Exact command for its input schema, a prefix such as post for names, or an array of commands to get several schemas in one call. Omit for command names only.' ),
+			'command' => array( 'type' => array( 'string', 'array' ), 'items' => array( 'type' => 'string' ), 'maxItems' => 20, 'description' => 'Exact command for its input schema, a prefix such as post for names, or an array of commands to get several schemas in one call. Omit for compact command and registered post type names.' ),
 		), 'additionalProperties' => false );
 	}
 
@@ -102,11 +102,15 @@ final class Guest_Key_Commands {
 			$entry = $catalog[ $command ];
 			$result = array( 'command' => $command, 'input_schema' => self::schema( $entry ) );
 			if ( isset( $entry['ability'] ) ) { $result['description'] = wp_get_ability( $entry['ability'] )->get_description(); }
-			return $result;
+		} else {
+			$result = array( 'commands' => array_values( array_filter( array_keys( $catalog ), static function ( $name ) use ( $command ) {
+				return '' === $command || 0 === strpos( $name, $command . ' ' );
+			} ) ) );
 		}
-		return array( 'commands' => array_values( array_filter( array_keys( $catalog ), static function ( $name ) use ( $command ) {
-			return '' === $command || 0 === strpos( $name, $command . ' ' );
-		} ) ) );
+		if ( '' === $command || 'post' === $command || 0 === strpos( $command, 'post ' ) ) {
+			$result['post_types'] = wp_list_pluck( get_post_types( array(), 'objects' ), 'label' );
+		}
+		return $result;
 	}
 
 	public static function run( $input ) {

@@ -7,7 +7,7 @@ wp_register_ability( 'guest-key/manage-posts', Guest_Key_Content_Abilities::args
 	'posts',
 	array(
 		'action' => array( 'type' => 'string', 'enum' => array( 'describe', 'list', 'get', 'create', 'update', 'trash', 'restore', 'delete' ) ),
-		'post_type' => array( 'type' => 'string', 'description' => 'Registered post type name. List/create default to post; item operations infer it from id. Describe without this returns all types.' ),
+		'post_type' => array( 'type' => 'string', 'description' => 'Exact registered name from help post_types or post describe; do not infer singular/plural names. List accepts any to search all editable registered types, including non-REST types. List/create default to post; item operations infer it from id. Describe without this returns all types.' ),
 		'id' => array( 'type' => 'integer', 'minimum' => 1 ),
 		'page' => array( 'type' => 'integer', 'minimum' => 1, 'default' => 1 ),
 		'per_page' => array( 'type' => 'integer', 'minimum' => 1, 'maximum' => 100, 'default' => 20 ),

@@ -25,7 +25,7 @@ final class Guest_Key_Content_Abilities {
 	public static function posts( $input ) {
 		$action = $input['action'];
 		if ( 'describe' === $action ) {
-			if ( isset( $input['post_type'] ) && ! post_type_exists( $input['post_type'] ) ) { return self::invalid( 'Unknown post type.' ); }
+			if ( isset( $input['post_type'] ) && ! post_type_exists( $input['post_type'] ) ) { return self::invalid( 'Unknown post type. Run post describe to discover registered post type names.' ); }
 			$types = array();
 			foreach ( get_post_types( array(), 'objects' ) as $type ) {
 				if ( isset( $input['post_type'] ) && $input['post_type'] !== $type->name ) { continue; }
@@ -42,16 +42,28 @@ final class Guest_Key_Content_Abilities {
 			$post = get_post( $input['id'] ?? 0 );
 			if ( ! $post || ( isset( $input['post_type'] ) && $input['post_type'] !== $post->post_type ) ) { return self::invalid( 'Provide an existing post ID matching the post type.' ); }
 		}
-		$type = get_post_type_object( $post ? $post->post_type : ( $input['post_type'] ?? 'post' ) );
-		if ( ! $type ) { return self::invalid( 'Unknown post type.' ); }
+		$any = 'list' === $action && 'any' === ( $input['post_type'] ?? '' );
+		$type = $any ? null : get_post_type_object( $post ? $post->post_type : ( $input['post_type'] ?? 'post' ) );
+		if ( ! $any && ! $type ) { return self::invalid( 'Unknown post type. Run post describe to discover registered post type names.' ); }
 		if ( 'list' === $action ) {
-			if ( ! current_user_can( $type->cap->edit_posts ) ) { return self::denied(); }
+			$types = array_filter( $any ? get_post_types( array(), 'objects' ) : array( $type->name => $type ), static function ( $candidate ) { return current_user_can( $candidate->cap->edit_posts ); } );
+			if ( ! $types ) { return self::denied(); }
 			$status = $input['status'] ?? 'any';
 			if ( 'any' !== $status && ! get_post_status_object( $status ) ) { return self::invalid( 'Unknown post status.' ); }
-			$args = array( 'post_type' => $type->name, 'post_status' => $status, 'posts_per_page' => $input['per_page'] ?? 20,
+			$args = array( 'post_type' => $any ? array_keys( $types ) : $type->name, 'post_status' => $status, 'posts_per_page' => $input['per_page'] ?? 20,
 				'paged' => $input['page'] ?? 1, 's' => $input['search'] ?? '', 'orderby' => 'ID', 'order' => 'ASC' );
-			if ( ! current_user_can( $type->cap->edit_others_posts ) ) { $args['author'] = get_current_user_id(); }
-			$query = new WP_Query( $args );
+			$own_types = array_keys( array_filter( $types, static function ( $candidate ) { return ! current_user_can( $candidate->cap->edit_others_posts ); } ) );
+			if ( ! $any && $own_types ) { $args['author'] = get_current_user_id(); $own_types = array(); }
+			$query = new WP_Query();
+			// Apply each type's author restriction before pagination, only to this query.
+			$restrict_authors = static function ( $where, $candidate ) use ( $query, $own_types ) {
+				if ( $candidate !== $query || ! $own_types ) { return $where; }
+				global $wpdb;
+				return $where . $wpdb->prepare( " AND ({$wpdb->posts}.post_type NOT IN (" . implode( ',', array_fill( 0, count( $own_types ), '%s' ) ) . ") OR {$wpdb->posts}.post_author = %d)", array_merge( $own_types, array( get_current_user_id() ) ) );
+			};
+			add_filter( 'posts_where', $restrict_authors, 10, 2 );
+			try { $query->query( $args ); }
+			finally { remove_filter( 'posts_where', $restrict_authors, 10 ); }
 			$items = array();
 			foreach ( $query->posts as $item ) {
 				if ( current_user_can( 'edit_post', $item->ID ) ) { $items[] = get_post( $item->ID, ARRAY_A ); }

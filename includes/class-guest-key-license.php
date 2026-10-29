@@ -164,7 +164,7 @@ final class Guest_Key_License {
 		$pending = get_option( self::PENDING, array() );
 		$previous = $pending;
 		if ( ( $fresh && ! empty( $pending['sent'] ) ) || ( $pending['email'] ?? '' ) !== $email || ( $pending['site'] ?? '' ) !== self::site() || ( $pending['until'] ?? 0 ) <= time() ) {
-			$data = self::service( '/v1/trials/challenge', array( 'email' => $email, 'site_url' => self::site() ) );
+			$data = self::service( '/v1/trials/challenge', array( 'email' => $email, 'site_url' => self::site(), 'trial_days' => 3 ) );
 			if ( is_wp_error( $data ) ) { return $data; }
 			if ( ! preg_match( '/^[a-f0-9]{64}$/', $data['proof_id'] ?? '' ) || ! preg_match( '/^[A-Za-z0-9_-]{43}$/', $data['proof'] ?? '' ) || empty( $data['challenge'] ) ) {
 				return new WP_Error( 'guest_key_service', __( 'Guest Key returned an invalid verification request.', 'guest-key' ) );
@@ -191,7 +191,7 @@ final class Guest_Key_License {
 		$data = self::service( '/v1/trials/start', array( 'challenge' => $pending['challenge'], 'verification_code' => trim( $code ) ) );
 		if ( is_wp_error( $data ) ) { return $data; }
 		$expires = is_string( $data['expires_at'] ?? null ) ? strtotime( $data['expires_at'] ) : false;
-		if ( ! is_string( $data['trial_token'] ?? null ) || ! preg_match( '/^[A-Za-z0-9_-]{43}$/', $data['trial_token'] ) || 'active' !== ( $data['status'] ?? '' ) || ! $expires || $expires <= time() || $expires > time() + DAY_IN_SECONDS + 60 ) { return new WP_Error( 'guest_key_service', __( 'Guest Key returned an invalid trial.', 'guest-key' ) ); }
+		if ( ! is_string( $data['trial_token'] ?? null ) || ! preg_match( '/^[A-Za-z0-9_-]{43}$/', $data['trial_token'] ) || 'active' !== ( $data['status'] ?? '' ) || ! $expires || $expires <= time() || $expires > time() + 3 * DAY_IN_SECONDS + 60 ) { return new WP_Error( 'guest_key_service', __( 'Guest Key returned an invalid trial.', 'guest-key' ) ); }
 		self::save( array( 'kind' => 'trial', 'email' => $pending['email'], 'token' => $data['trial_token'], 'site' => self::site(), 'status' => 'active', 'expires' => $expires, 'checked' => time() ) );
 		delete_option( self::PENDING );
 		return true;

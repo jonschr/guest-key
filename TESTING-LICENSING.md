@@ -1,6 +1,53 @@
+## 0.2.4 release validation — 2026-10-29
+
+Production connector 0.2.1/schema 4 is deployed and healthy. Current plugins request `trial_days: 3` in the email challenge; its signature fixes the 72-hour duration through completion/retry. Older plugins retain their supported one-day issuance. Migration 004 preserves existing trial expiration, verification evidence, purchase rows and runtime restrictions. A restored production backup was migrated and compared before production migration. No existing trials were extended.
+
+Passed on the isolated release site: automatic licensing 20, paid licensing 29, license expiration 9, duration 39, authentication 25, browser 38, roles 41, command help/execution 55, content 59, dispatch 16, settings 22 and diagnostics 13 (366 checks). Six JavaScript checks passed; PHP syntax passed across 121 files, including bundled dependencies. The nine isolated service tests include real PostgreSQL and HTTP, 72-hour issuance, legacy issuance, email wording, signed duration/retry behavior, invalid duration rejection and the complete migration.
+
+The initial authentication run lacked an entitled fixture; it failed without issuing access. With the existing isolated paid setup and adapter initialized before bootstrap, all 25 authentication checks passed. The first backup-restore preflight hit a private-file permission boundary; reading the root-only backup through stdin fixed the preflight without broadening permissions. Both disposable preflight databases were removed.
+
+All recent settings changes are included: license first/highlight, side-by-side visible key and email entry, no saved-key input until removal, compact connection text, local expiration, readable 15-minute slider, current WordPress hover accent, animated copy feedback and background purchase matching. Previous browser screenshots record these states; final package/upgrade verification follows before publication is complete.
+
+## Side-by-side license entry — October 29, 2026 (development only)
+
+- License entry is on the left; trial email/code entry is on the right, stacking when space is limited. Key entry is a normal text field with autocomplete, spellcheck, and autocapitalization disabled; the Show/Hide toggle is removed.
+- Stored paid licenses continue to show status/actions only, including after reload; removing the license reveals a fresh empty key field.
+- 22 settings and 6 JavaScript checks passed. Browser checked text/email types, horizontal alignment, activation, reload, and removal using a disposable fixture that never stores keys or changes real licensing. Fixture and its boolean state file removed. Screenshot: `68-side-by-side-license-entry.png`.
+- This replaces the earlier masked-by-default UI; the previous native TextExpander test already verified ordinary text inputs work.
+
+## Local copy confirmation — October 28, 2026 (development only)
+
+- Confirmation names Claude and Codex; expiration uses browser-local time, a short zone, and tomorrow when crossing midnight. The connection status and clipboard fallback share the same formatting.
+- 22 settings checks and 5 JavaScript checks passed; JavaScript checks run in America/Chicago, America/Los_Angeles, and UTC.
+- Browser confirmed the copied message with a credential-free AJAX fixture on the disposable release QA site. Fixture removed; no credentials issued or licensing records changed. Screenshot: `66-local-copy-confirmation.png`.
+
+# Access duration slider — development
+
+The number field is now a native range slider with visible 30-minute/24-hour endpoints and a live selected value; the explanatory paragraph was removed. Existing one-minute precision and server bounds remain unchanged. Chrome verified Home/End at 30 and 1440, live unit labels, arrow-key adjustment, and native form saving on isolated QA; the original QA duration was restored. Settings 20 and purchase-check 4 tests passed. Screenshot 64 records the desktop slider. These changes are not released yet.
+
+# Native TextExpander verification
+
+On 2026-10-28, Chrome on the isolated QA site verified the actual existing `zgues` shortcut using native macOS typing. With Show key enabled, TextExpander expanded it to the expected 36-character owner license (compared privately; the key was not logged). Hide key restored password masking. The field was then cleared and verified empty; Activate license was never clicked. Screenshot 62 records masked entry before clearing. This completes the previously pending foreground TextExpander check.
+
+# Cross-type post searches and help discovery — development
+
+130 checks passed: content 59, commands 55, REST dispatch 16. Tests cover `post_type: "any"` across non-public and non-REST types, mixed per-type author restrictions before pagination/counting, excluded types without edit permissions, query-filter cleanup, invalid-type discovery guidance, rejecting `any` for creation, dynamic type names/labels in default and focused help, and authenticated REST help/list calls. Existing failed-batch tests retain `failed_index` and `skipped`. The isolated QA license, adapter state, temporary users/content, and access grants were restored after testing. These changes are development-only.
+
+# Compact connection and duration cards — development
+
+The connection card uses one paragraph, an icon-bearing Copy Guest Key button, and an initially empty live status region. Access duration uses an inline number/units/Save row and one help line. The existing 20 settings checks passed; Chrome desktop and 390px views confirmed the icon is white and controls do not cause horizontal overflow. Screenshot 60 records the updated development page. Access creation and duration enforcement are unchanged; this UI is not released yet.
+
+# Automatic purchase checks on hover — development
+
+Four JavaScript checks passed using the actual admin script: expired-trial startup/hover/focus checks, in-flight request sharing and the 15-second cooldown, paid-state polling stop, manual activation waiting for an in-flight check, quiet outage retry, and hidden/unregistered/paid-site guards. Settings 20 and automatic licensing 18 regression checks passed. Chrome with an isolated response fixture verified that no-match hover preserves the entered license and focus, the manual purchase button is absent, and an expired trial switches to the licensed card without navigation when a purchase is found. Screenshot 59 records that simulated success state. The fixture was removed; no QA license or grant was saved. These changes remain development-only.
+
+# Toolbar and two-column settings — development
+
+108 checks passed: settings page 20, roles 41, licensing 29 and automatic licensing 18. Chrome on the isolated QA site verified successful native clipboard copying with checkmark/Copied! feedback, Settings navigation, keyboard ArrowDown focus, toolbar revocation and hiding the revoke link afterward, inventory filtering and schema inspection. Desktop columns measured the same height. At 390px, columns stack with no horizontal page overflow. Hover computed as #2271b1 with #fff text. Temporary QA licensing and access were removed afterward. Screenshots 55–58 record the desktop, copy feedback, dropdown and mobile layouts. No live release has been published for these changes.
+
 # License entry — 0.2.3
 
-Show/Hide key keeps password entry by default and replaces the input when toggling, because Chrome retains password-history flags. CSS masking was rejected after checking Chromium Secure Input handling. Chrome verified password entry by default, unmasked text entry after Show key, focus transfer, repeated Show/Hide toggles preserving the entered value, and disabled autocomplete and text corrections. Settings-page 18 and licensing 29 regression checks passed. Screenshot 54 records the masked default. Native TextExpander expansion remains pending an uninterrupted foreground Chrome session. No licensing/provider logic changed.
+Show/Hide key keeps password entry by default and replaces the input when toggling, because Chrome retains password-history flags. CSS masking was rejected after checking Chromium Secure Input handling. Chrome verified password entry by default, unmasked text entry after Show key, focus transfer, repeated Show/Hide toggles preserving the entered value, and disabled autocomplete and text corrections. Settings-page 18 and licensing 29 regression checks passed. Screenshot 54 records the masked default. Native TextExpander expansion was subsequently verified; see the native verification entry above. No licensing/provider logic changed.
 
 # Toolbar/settings verification — 0.2.2
 
