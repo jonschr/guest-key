@@ -1,3 +1,7 @@
+# Toolbar/settings verification — 0.2.2
+
+106 checks passed: settings page 18, roles 41, licensing 29 and automatic licensing 18. Chrome on the isolated QA site verified a real perpetual owner-license activation, status check and instance removal; the licensed toolbar contains only the native Settings link and its target opens the settings page. QA-only provider fixtures covered active and expired trial settings, expired-trial activation, immediate post-activation keyboard focus, and clearing all license-entry fields from the closed setup panel. Screenshots 49–52 record these states. Licensing/provider logic is unchanged; no connector deployment is required.
+
 # Local licensing verification — 0.2.0 candidate
 
 ## Public webhook and native-update verification — 2026-10-28

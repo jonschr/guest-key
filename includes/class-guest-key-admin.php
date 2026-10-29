@@ -59,9 +59,7 @@ final class Guest_Key_Admin {
 			'title' => '<span class="ab-icon dashicons dashicons-admin-page" aria-hidden="true"></span><span class="ab-label">' . esc_html__( 'Copy Guest Key', 'guest-key' ) . '</span>',
 			'meta' => array( 'title' => sprintf( __( 'Create and copy Guest Key access for up to %s', 'guest-key' ), self::duration_label() ) ),
 		) );
-		$bar->add_node( array( 'id' => 'guest-key-abilities', 'parent' => 'guest-key-access', 'title' => __( 'Technical inventory', 'guest-key' ), 'href' => self::page_url() . '#guest-key-inventory' ) );
-		$bar->add_node( array( 'id' => 'guest-key-license', 'parent' => 'guest-key-access', 'title' => __( 'License & trial', 'guest-key' ), 'href' => self::page_url() ) );
-		$bar->add_node( array( 'id' => 'guest-key-revoke', 'parent' => 'guest-key-access', 'title' => __( 'Revoke my access', 'guest-key' ), 'href' => self::page_url() ) );
+		$bar->add_node( array( 'id' => 'guest-key-settings', 'parent' => 'guest-key-access', 'title' => __( 'Settings', 'guest-key' ), 'href' => self::page_url() ) );
 	}
 
 	public static function assets() {
@@ -76,7 +74,7 @@ final class Guest_Key_Admin {
 		wp_localize_script( 'guest-key', 'guestKey', array(
 			'ajaxUrl' => admin_url( 'admin-ajax.php' ), 'nonce' => wp_create_nonce( 'guest_key_access' ),
 			'licensing' => Guest_Key_License::view(),
-			'noticeKey' => get_current_blog_id() . ':' . get_current_user_id(), 'settingsUrl' => self::page_url() . '#guest-key-license-settings',
+			'noticeKey' => get_current_blog_id() . ':' . get_current_user_id(), 'settingsUrl' => self::page_url(),
 			'strings' => array(
 				'creating' => __( 'Preparing Guest Key…', 'guest-key' ), 'created' => __( 'Guest Key access created.', 'guest-key' ),
 				'copied' => __( 'Connection details copied. Paste them into your agent.', 'guest-key' ), 'expires' => __( 'Expires: ', 'guest-key' ),
@@ -90,7 +88,8 @@ final class Guest_Key_Admin {
 				'manualCopy' => __( 'Select and copy these connection details using your browser’s Copy command.', 'guest-key' ),
 				'diagnosticsCopied' => __( 'Diagnostics copied. Share this report with support.', 'guest-key' ),
 				'diagnosticsSelect' => __( 'Diagnostics are selected. Use your browser’s Copy command.', 'guest-key' ),
-				'licenseSettings' => __( 'License & trial', 'guest-key' ),
+				'licenseSettings' => __( 'License', 'guest-key' ), 'settings' => __( 'Guest Key settings', 'guest-key' ),
+				'trialTitle' => __( 'Free trial', 'guest-key' ), 'manageBilling' => __( 'Manage billing', 'guest-key' ),
 				'automaticLicense' => __( 'Purchasing with %s? Your license will connect automatically.', 'guest-key' ),
 				'purchasePending' => __( 'No license is connected yet. Check your purchase email or enter a key below.', 'guest-key' ),
 				'checkPurchase' => __( 'Check for my purchase', 'guest-key' ),
@@ -205,9 +204,10 @@ final class Guest_Key_Admin {
 			</section>
 			<?php endif; ?>
 			<section class="guest-key-card guest-key-connect" id="guest-key-license-settings" aria-labelledby="guest-key-license-settings-title">
-				<h2 id="guest-key-license-settings-title"><?php esc_html_e( 'License & trial', 'guest-key' ); ?></h2>
-				<p><?php esc_html_e( 'Manage your trial or license. To change a saved license, remove it first, then enter your replacement key.', 'guest-key' ); ?></p>
-				<button type="button" class="button" data-guest-key-license-settings><?php esc_html_e( 'Manage license', 'guest-key' ); ?></button>
+				<div data-guest-key-license-settings>
+					<h2 id="guest-key-license-settings-title"><?php echo 'paid' === Guest_Key_License::view()['kind'] ? esc_html__( 'License', 'guest-key' ) : esc_html__( 'Get started', 'guest-key' ); ?></h2>
+					<noscript><p><?php esc_html_e( 'Enable JavaScript to manage your license.', 'guest-key' ); ?></p></noscript>
+				</div>
 			</section>
 			<details class="guest-key-details">
 				<summary><?php esc_html_e( 'Connection details', 'guest-key' ); ?></summary>

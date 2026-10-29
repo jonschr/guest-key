@@ -13,14 +13,17 @@
 	let panelPinned = false;
 	const toolbarItem = document.querySelector('#wp-admin-bar-guest-key-access');
 	const toolbarLink = toolbarItem?.querySelector(':scope > .ab-item');
+	const licenseSettings = document.querySelector('[data-guest-key-license-settings]');
+	const settingsLink = document.querySelector('#wp-admin-bar-guest-key-settings > .ab-item');
 	const dismissalKey = `guest-key-dismissed:${guestKey.noticeKey}`;
 	const dismissed = () => { try { return Number(localStorage.getItem(dismissalKey)) > Date.now(); } catch { return false; } };
 	function positionLicensePanel() {
-		const open = Boolean((licensePanel && !licensePanel.hidden) || (notice && !notice.hidden));
-		toolbarLink?.setAttribute('aria-expanded', String(open));
+		const panels = [licensePanel, notice].filter(panel => panel && panel !== licenseSettings && !panel.hidden);
+		const open = panels.length > 0;
+		toolbarLink?.setAttribute('aria-controls', open ? panels.map(panel => panel.id).join(' ') : 'wp-admin-bar-guest-key-access-default');
+		toolbarLink?.setAttribute('aria-expanded', String(open || toolbarItem?.classList.contains('hover')));
 		toolbarItem?.classList.toggle('guest-key-panel-open', open);
-		for (const panel of [licensePanel, notice]) {
-			if (!panel || panel.hidden) continue;
+		for (const panel of panels) {
 			const anchor = toolbarLink || document.querySelector('[data-guest-key-create]');
 			const rect = anchor?.getBoundingClientRect();
 			const left = Math.max(8, Math.min(rect?.left || 8, innerWidth - panel.offsetWidth - 8));
@@ -32,13 +35,14 @@
 	}
 
 	function hideLicensePanel(remember = false) {
-		if (!licensePanel) return;
+		if (!licensePanel || licenseSettings) return;
 		licensePanel.hidden = true;
 		panelPinned = false;
 		positionLicensePanel();
 		if (remember) { try { localStorage.setItem(dismissalKey, String(Date.now() + 86400000)); } catch { /* Storage may be disabled. */ } }
 	}
 	function leaveLicensePanel() {
+		if (licenseSettings) return;
 		clearTimeout(hoverTimer);
 		if (!panelPinned) hoverTimer = setTimeout(() => {
 			if (!licensePanel?.contains(document.activeElement)) hideLicensePanel();
@@ -94,10 +98,20 @@
 	}
 
 	function licenseNotice(message = '', editEmail = false, takeFocus = true) {
+		if (licensing?.kind === 'paid' && licensing.active && !licenseSettings) {
+			const restoreFocus = licensePanel?.contains(document.activeElement);
+			hideLicensePanel();
+			licensePanel?.replaceChildren();
+			if (restoreFocus) toolbarLink?.focus();
+			if (message) status(message);
+			return;
+		}
 		clearTimeout(dismissTimer);
 		if (notice) notice.hidden = true;
 		if (!licensePanel?.contains(document.activeElement)) noticeReturnFocus = document.activeElement;
-		if (!licensePanel) {
+		if (licenseSettings) {
+			licensePanel = licenseSettings;
+		} else if (!licensePanel) {
 			licensePanel = document.createElement('div');
 			licensePanel.id = 'guest-key-license-panel';
 			licensePanel.className = 'guest-key-license-notice';
@@ -114,8 +128,11 @@
 		panelPinned = takeFocus || panelPinned;
 
 		if (message === s.codeSent) message = s.codeSent.replace('%s', licensing.email);
-		licensePanel.setAttribute('role', 'region'); licensePanel.setAttribute('aria-label', licensing?.active ? s.licenseSettings : s.licenseTitle); licensePanel.removeAttribute('aria-live');
-		const heading = document.createElement('strong'); heading.textContent = licensing?.active ? s.licenseSettings : s.licenseTitle;
+		const title = licensing?.kind === 'paid' ? s.licenseSettings : licensing?.active ? s.trialTitle : s.licenseTitle;
+		if (!licenseSettings) { licensePanel.setAttribute('role', 'region'); licensePanel.setAttribute('aria-label', title); }
+		licensePanel.removeAttribute('aria-live');
+		const heading = document.createElement(licenseSettings ? 'h2' : 'strong'); heading.textContent = title;
+		if (licenseSettings) heading.id = 'guest-key-license-settings-title';
 		const close = document.createElement('button'); close.type = 'button'; close.className = 'guest-key-license-close'; close.textContent = s.close;
 		close.addEventListener('click', () => { hideLicensePanel(true); noticeReturnFocus?.focus(); });
 		const intro = document.createElement('p');
@@ -124,7 +141,7 @@
 				: licensing?.expired ? s.trialExpired : s.trialIntro;
 		const feedback = document.createElement('p'); feedback.className = 'guest-key-license-feedback';
 		feedback.setAttribute('role', 'status'); feedback.setAttribute('aria-live', 'polite'); feedback.textContent = message === intro.textContent ? '' : message;
-		licensePanel.replaceChildren(heading, close, intro, feedback);
+		licensePanel.replaceChildren(heading, ...(licenseSettings ? [] : [close]), intro, feedback);
 		async function run(callback) {
 			if (busy) return;
 			setBusy(true); licensePanel.querySelectorAll('button, input').forEach(item => { item.disabled = true; }); feedback.textContent = s.working;
@@ -134,6 +151,7 @@
 		}
 		function action(label, callback) {
 			const button = document.createElement('button'); button.type = 'button'; button.textContent = label;
+			if (licenseSettings) button.className = 'button';
 			button.addEventListener('click', () => run(callback)); licensePanel.append(button); return button;
 		}
 		function form(label, type, submit, callback) {
@@ -143,14 +161,20 @@
 			if (type === 'text') { input.inputMode = 'numeric'; input.pattern = '[0-9]{6}'; input.maxLength = 6; }
 			if (type === 'email') input.value = licensing?.email || '';
 			if (type === 'password') { input.maxLength = 200; input.spellcheck = false; }
+			if (licenseSettings) { input.className = 'regular-text'; fieldLabel.append(document.createElement('br')); }
 			fieldLabel.append(input);
 			const button = document.createElement('button'); button.type = 'submit'; button.textContent = submit;
-			form.append(fieldLabel, button); form.addEventListener('submit', event => { event.preventDefault(); run(() => callback(input.value)); }); licensePanel.append(form); return input;
+			if (licenseSettings) {
+				button.className = 'button button-primary';
+				const fieldRow = document.createElement('p'); fieldRow.append(fieldLabel);
+				const submitRow = document.createElement('p'); submitRow.append(button); form.append(fieldRow, submitRow);
+			} else form.append(fieldLabel, button);
+			form.addEventListener('submit', event => { event.preventDefault(); run(() => callback(input.value)); }); licensePanel.append(form); return input;
 		}
 		let focus;
-		if (licensing?.active) {
+		if (licensing?.active && !licenseSettings) {
 			focus = action(s.continueConnect, async () => { hideLicensePanel(); setBusy(false); await createAccess({preventDefault() {}}); });
-		} else if (licensing?.kind !== 'paid' && !licensing?.expired) {
+		} else if (!licensing?.active && licensing?.kind !== 'paid' && !licensing?.expired) {
 			if (licensing?.pending && !editEmail) {
 				if (!message) feedback.textContent = s.codeSent.replace('%s', licensing.email);
 				focus = form(s.code, 'text', s.verifyCode, async code => { await request('guest_key_license_verify', {code}); licenseNotice(s.trialActive); });
@@ -166,15 +190,16 @@
 			const input = form(s.licenseKey, 'password', s.activateLicense, async key => { await request('guest_key_license_activate', {key}); licenseNotice(s.licenseActive); });
 			focus ||= input;
 		}
-		const checkout = document.createElement('a'); checkout.textContent = licensing?.kind === 'paid' ? s.renewLicense : s.buyLicense;
+		const checkout = document.createElement('a'); checkout.textContent = licensing?.kind === 'paid' ? (licensing.active ? s.manageBilling : s.renewLicense) : s.buyLicense;
 		checkout.href = licensing?.kind === 'paid' ? licensing.renew : licensing.checkout;
+		if (licenseSettings) checkout.className = 'button';
 		checkout.target = '_blank'; checkout.rel = 'noopener noreferrer'; licensePanel.append(checkout);
 		if (licensing?.email && licensing?.kind === 'trial') {
 			const match = document.createElement('p'); match.textContent = s.automaticLicense.replace('%s', licensing.email); licensePanel.append(match);
 		}
 		if (licensing?.kind === 'trial') action(s.checkPurchase, async () => { await request('guest_key_license_status'); licenseNotice(licensing.kind === 'paid' ? s.licenseActive : s.purchasePending); });
-		if (!document.querySelector('[data-guest-key-license-settings]')) {
-			const settings = document.createElement('a'); settings.href = guestKey.settingsUrl; settings.textContent = s.licenseSettings; licensePanel.append(settings);
+		if (!licenseSettings) {
+			const settings = document.createElement('a'); settings.href = guestKey.settingsUrl; settings.textContent = s.settings; licensePanel.append(settings);
 		}
 		positionLicensePanel();
 		if (takeFocus) focus?.focus();
@@ -352,24 +377,32 @@
 		}
 	});
 
-	toolbarLink?.setAttribute('aria-controls', 'guest-key-license-panel guest-key-status-panel');
+	toolbarLink?.setAttribute('aria-controls', 'wp-admin-bar-guest-key-access-default');
 	toolbarLink?.setAttribute('aria-expanded', 'false');
 	toolbarLink?.addEventListener('click', createAccess);
 	toolbarItem?.addEventListener('mouseenter', () => {
 		clearTimeout(hoverTimer);
+		if (licensing?.active && notice && !notice.hidden) { notice.hidden = true; positionLicensePanel(); }
 		if (!busy && !licensing?.active && (!licensePanel || licensePanel.hidden)) licenseNotice('', false, false);
 	});
 	toolbarItem?.addEventListener('mouseleave', leaveLicensePanel);
 	toolbarLink?.addEventListener('keydown', event => {
-		if (event.key === 'ArrowDown') { event.preventDefault(); licenseNotice(); }
+		if (event.key === 'ArrowDown') {
+			event.preventDefault();
+			if (licensing?.active) {
+				if (notice) notice.hidden = true;
+				positionLicensePanel();
+				toolbarItem.classList.add('hover'); toolbarLink.setAttribute('aria-expanded', 'true'); settingsLink?.focus();
+			} else licenseNotice();
+		}
 	});
 	window.addEventListener('resize', positionLicensePanel);
 	window.addEventListener('scroll', positionLicensePanel, {passive: true});
 	document.addEventListener('pointerdown', event => {
 		if (licensePanel && !licensePanel.hidden && !licensePanel.contains(event.target) && !toolbarItem?.contains(event.target)) hideLicensePanel();
 	});
-	document.querySelector('[data-guest-key-license-settings]')?.addEventListener('click', () => licenseNotice());
-	if (!licensing?.active && !dismissed()) { licenseNotice('', false, false); panelPinned = true; }
+	if (licenseSettings) licenseNotice('', false, false);
+	else if (!licensing?.active && !dismissed()) { licenseNotice('', false, false); panelPinned = true; }
 	async function refreshPurchase() {
 		if (busy || licensing?.kind !== 'trial' || document.hidden) return;
 		try {
@@ -384,8 +417,6 @@
 	setInterval(refreshPurchase, 60000);
 	document.addEventListener('visibilitychange', refreshPurchase);
 	window.addEventListener('focus', refreshPurchase);
-	document.querySelector('#wp-admin-bar-guest-key-revoke > .ab-item')?.addEventListener('click', revokeAccess);
-	document.querySelector('#wp-admin-bar-guest-key-license > .ab-item')?.addEventListener('click', event => { event.preventDefault(); if (!busy) licenseNotice(); });
 	document.querySelectorAll('[data-guest-key-create]').forEach(button => button.addEventListener('click', createAccess));
 	document.querySelectorAll('[data-guest-key-revoke]').forEach(button => button.addEventListener('click', revokeAccess));
 	document.querySelectorAll('[data-guest-key-inspect]').forEach(button => button.addEventListener('click', inspectAbility));
