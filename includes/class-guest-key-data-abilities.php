@@ -116,15 +116,22 @@ final class Guest_Key_Data_Abilities {
 		if ( 'describe' === $action ) {
 			$fields = array();
 			foreach ( $registered as $name => $args ) {
-				if ( ( $key && $key !== $name ) || self::protected_key( $type, $name ) ) { continue; }
+				if ( ( $key && $key !== $name ) || ( 'user' === $type && self::protected_key( $type, $name ) ) ) { continue; }
 				unset( $args['auth_callback'], $args['sanitize_callback'] );
 				$fields[ $name ] = array( 'registration' => $args, 'protected' => is_protected_meta( $name, $type ), 'can_edit' => current_user_can( 'edit_' . $type . '_meta', $id, $name ) );
 			}
 			return $fields;
 		}
 		if ( 'list' === $action ) {
-			$keys = array_filter( array_keys( get_metadata( $type, $id ) ), static function ( $name ) use ( $type, $id, $registered ) { return ! self::protected_key( $type, $name ) && current_user_can( 'edit_' . $type . '_meta', $id, self::registered_key( $name, $registered ) ); } );
-			return array( 'keys' => array_values( $keys ) );
+			$keys = array_filter( array_keys( get_metadata( $type, $id ) ), static function ( $name ) use ( $type, $id, $registered ) { return 'term' === $type || ( ! self::protected_key( $type, $name ) && current_user_can( 'edit_' . $type . '_meta', $id, self::registered_key( $name, $registered ) ) ); } );
+
+			$result = array( 'keys' => array_values( $keys ) );
+			if ( 'term' === $type ) { $result['values'] = array(); foreach ( $keys as $name ) { $result['values'][ $name ] = get_term_meta( $id, $name, false ); } }
+			return $result;
+		}
+		if ( 'term' === $type && 'get' === $action ) {
+			if ( ! is_string( $key ) || '' === $key ) { return self::invalid( 'Provide a nonempty metadata key.' ); }
+			return array( 'key' => $key, 'exists' => metadata_exists( 'term', $id, $key ), 'values' => get_term_meta( $id, $key, false ) );
 		}
 		if ( ! self::valid_key( $key ) ) { return self::invalid( 'Provide an exact, nonempty ASCII metadata key without whitespace.' ); }
 		if ( self::protected_key( $type, $key ) ) { return self::denied(); }

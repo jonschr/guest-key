@@ -84,8 +84,15 @@ try {
 	$assert( ! is_wp_error( $settings ) && get_option( 'default_comment_status' ) !== $comment_status, 'Update a native site setting through MCP' );
 	update_option( 'default_comment_status', $comment_status );
 	$user = $call( 'manage-users', array( 'method' => 'POST', 'path' => '/wp/v2/users', 'parameters' => array( 'username' => 'guest-key-created-' . wp_generate_password( 10, false ), 'email' => 'guest-key-test-' . wp_generate_password( 10, false ) . '@example.invalid', 'password' => wp_generate_password( 32 ), 'roles' => array( 'subscriber' ) ) ) );
-	$assert( ! is_wp_error( $user ) && 201 === $user['status'], 'Create a user through native account permissions' );
-	$users[] = $user['data']['id'];
+	$assert( is_wp_error( $user ), 'Guest Key cannot create a new user account' );
+	$profile = $call( 'manage-users', array( 'method' => 'POST', 'path' => '/wp/v2/users/' . $uid, 'parameters' => array( 'first_name' => 'Safe MCP profile' ) ) );
+	wp_cache_delete( $uid, 'user_meta' );
+	$assert( ! is_wp_error( $profile ) && 'Safe MCP profile' === get_user_meta( $uid, 'first_name', true ), 'MCP allows basic profile edits' );
+	$assert( is_wp_error( $call( 'manage-users', array( 'method' => 'POST', 'path' => '/wp/v2/users/' . $uid, 'parameters' => array( 'roles' => array( 'subscriber' ) ) ) ) ), 'MCP cannot change user roles' );
+	$cron = $call( 'manage-cron', array( 'action' => 'list' ) );
+	$assert( ! is_wp_error( $cron ) && isset( $cron['items'], $cron['total'] ), 'MCP can inspect cron events' );
+	$theme = $call( 'get-theme' );
+	$assert( ! is_wp_error( $theme ) && get_stylesheet() === $theme['stylesheet'], 'MCP can inspect the active theme' );
 	$upload = $call( 'upload-media', array( 'filename' => 'guest-key-admin-test.gif', 'base64' => 'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'fields' => array( 'alt_text' => 'Guest Key temporary upload' ) ) );
 	$assert( ! is_wp_error( $upload ) && 201 === $upload['status'], 'Upload media through the native attachment controller' );
 	$media[] = $upload['data']['id'];

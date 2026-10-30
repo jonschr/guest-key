@@ -13,6 +13,16 @@ final class Guest_Key_Package_Abilities {
 		);
 	}
 
+	public static function list_themes( $input ) {
+		return array_values( array_map( static function ( $theme ) { return array( 'stylesheet' => $theme->get_stylesheet(), 'template' => $theme->get_template(), 'name' => $theme->get( 'Name' ), 'version' => $theme->get( 'Version' ), 'active' => get_stylesheet() === $theme->get_stylesheet() ); }, wp_get_themes() ) );
+	}
+
+	public static function get_theme( $input ) {
+		$theme = wp_get_theme( $input['stylesheet'] ?? get_stylesheet() );
+		if ( ! $theme->exists() ) { return new WP_Error( 'guest_key_theme_missing', 'Installed theme not found.' ); }
+		return array( 'stylesheet' => $theme->get_stylesheet(), 'template' => $theme->get_template(), 'name' => $theme->get( 'Name' ), 'version' => $theme->get( 'Version' ), 'active' => get_stylesheet() === $theme->get_stylesheet(), 'description' => $theme->get( 'Description' ), 'author' => $theme->get( 'Author' ), 'theme_uri' => $theme->get( 'ThemeURI' ) );
+	}
+
 	private static function filesystem() {
 		if ( ! wp_is_file_mod_allowed( 'guest_key_package_management' ) ) {
 			return new WP_Error( 'guest_key_file_mods_disabled', 'Package changes are disabled by this site’s filesystem policy.' );

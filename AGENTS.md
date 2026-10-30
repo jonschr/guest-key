@@ -17,3 +17,11 @@ Licenses, trials, pending verification, and purchase matching are scoped to the 
 Post-level `edit_post` permission grants complete read access through `post meta get/list`, including protected and unregistered stored keys. Do not apply per-key write permissions, registration, or REST-exposure filters to these reads. Preserve `exists` and value-list response semantics.
 
 For writes, underscore-only protection is not an authorization rule. `can_write_meta()` supplies an allowed baseline only during the specific post/key/action capability check, before existing native authorization filters. Registered/global/subtype auth callbacks, capability filters, readonly schemas, value validation and native metadata sanitizers/hooks still apply. Use the same helper in individual metadata writes, combined `post save` preflight and field descriptions. Never change protection or permissions globally, special-case plugin names, or claim generic writes run validation found only in plugin-specific forms.
+
+## Operations and account boundaries
+
+Expose cron through native scheduling APIs and theme/plugin management through native package APIs. Keep raw lifecycle options protected. Cron run consumes one selected occurrence and preserves recurrence; it executes existing registered callbacks, not arbitrary PHP.
+
+Guest Key must not create/delete user accounts or alter roles, passwords, email/authentication or membership permissions. API profile edits are limited to name, first_name, last_name, nickname, description, url and locale. Enforce the shared REST policy in both Guest Key dispatch and direct temporary-session requests, including nested native batches; enforce native account capabilities for temporary browser sessions. Preserve user-meta authentication/permission/session protections. Do not imply this is a sandbox for arbitrary installed plugin code.
+
+Term-level edit permission grants complete term-meta get/list reads, including protected, unregistered and auth-denied fields. Keep keys and missing/empty/multiple-value semantics; list also includes values. Reads require no per-key write capability. Term-meta writes retain existing authorization, registration, schemas and sanitization.

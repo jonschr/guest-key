@@ -1,5 +1,12 @@
 # Changes
 
+## 0.2.6 — 2026-10-30
+
+- Add cron event listing, recurrence inspection, scheduling, immediate execution and deletion using native WordPress APIs.
+- Add installed/current-theme inspection commands; retain plugin and theme package management.
+- Allow complete term-metadata reads without per-field write authorization; retain term write checks and user-meta protections.
+- Block account creation/deletion and sensitive user changes through Guest Key, direct REST, REST batches and temporary browser sessions. Retain basic profile edits through the API.
+
 ## 0.2.5 — 2026-10-29
 
 - Licenses and trials belong to the activating administrator. Owners can share paid access with selected administrators, and separate licenses can coexist on one site.

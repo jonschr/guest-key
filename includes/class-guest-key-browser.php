@@ -13,6 +13,7 @@ final class Guest_Key_Browser {
 		add_filter( 'determine_current_user', array( __CLASS__, 'validate_session' ), 30 );
 		add_action( 'set_current_user', array( __CLASS__, 'authorize_session' ) );
 		add_filter( 'map_meta_cap', array( __CLASS__, 'restrict_capabilities' ), 99, 4 );
+		add_filter( 'rest_pre_dispatch', array( __CLASS__, 'restrict_user_rest' ), 9, 3 );
 		add_filter( 'attach_session_information', array( __CLASS__, 'inherit_session' ), 90, 2 );
 		add_filter( 'auth_cookie_expiration', array( __CLASS__, 'limit_expiration' ), 99, 2 );
 	}
@@ -81,14 +82,32 @@ final class Guest_Key_Browser {
 	}
 
 	public static function restrict_capabilities( $caps, $cap, $user_id, $args ) {
-		// Use the provided user ID; this filter must not resolve the current user.
-		if ( ! in_array( $cap, array( 'edit_files', 'edit_plugins', 'edit_themes', 'create_app_password' ), true ) ) { return $caps; }
-		if ( Guest_Key_Access::is_guest_request( $user_id ) ) { return array( 'do_not_allow' ); }
+		$blocked = array( 'edit_files', 'edit_plugins', 'edit_themes', 'create_app_password', 'create_users', 'promote_users', 'promote_user', 'remove_user', 'delete_users', 'delete_user', 'remove_users', 'add_users', 'manage_network_users' );
+		if ( ! in_array( $cap, $blocked, true ) && ! in_array( $cap, array( 'edit_users', 'edit_user' ), true ) ) { return $caps; }
 		$session = self::session( $user_id );
-		if ( ! empty( $session[ self::SESSION ] ) ) {
-			return array( 'do_not_allow' );
-		}
+		$browser = ! empty( $session[ self::SESSION ] );
+		if ( ( Guest_Key_Access::is_guest_request( $user_id ) || $browser ) && ( in_array( $cap, $blocked, true ) || ( $browser && in_array( $cap, array( 'edit_users', 'edit_user' ), true ) ) ) ) { return array( 'do_not_allow' ); }
 		return $caps;
+	}
+
+	/** Shared by command dispatch and direct REST, including native batch subrequests. */
+	public static function user_request_policy( $request ) {
+		if ( ! preg_match( '#^/wp/v2/users(?:/|$)#', $request->get_route() ) || in_array( $request->get_method(), array( 'GET', 'HEAD', 'OPTIONS' ), true ) ) { return null; }
+		$allowed = array( 'name', 'first_name', 'last_name', 'nickname', 'description', 'url', 'locale', 'context', '_fields', 'id', 'rest_route', '_locale' );
+		if ( ! in_array( $request->get_method(), array( 'POST', 'PUT', 'PATCH' ), true ) || ! preg_match( '#^/wp/v2/users/(?:[0-9]+|me)/?$#', $request->get_route() ) || array_diff( array_keys( $request->get_params() ), $allowed ) ) {
+			return new WP_Error( 'guest_key_user_restricted', 'Guest Key allows basic profile edits only. Account creation/deletion and role, password, email, or authentication changes require a normal administrator session.', array( 'status' => 403 ) );
+		}
+		return null;
+	}
+
+	public static function restrict_user_rest( $result, $server, $request ) {
+		if ( is_wp_error( $result ) ) { return $result; }
+		$user_id = get_current_user_id();
+		if ( Guest_Key_Access::is_guest_request( $user_id ) || self::is_guest_session() ) {
+			$policy = self::user_request_policy( $request );
+			return is_wp_error( $policy ) ? rest_convert_error_to_response( $policy ) : $result;
+		}
+		return $result;
 	}
 
 	public static function inherit_session( $information, $user_id ) {

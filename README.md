@@ -14,8 +14,10 @@ Connect through authenticated REST commands, an optional MCP endpoint, or tempor
 | `term` | Discover taxonomies and manage terms and assignments |
 | `media upload` | Upload media with captions and alt text |
 | `option`, `theme mod` | Manage supported site options and theme modifications |
-| `user meta`, `term meta` | Discover and manage authorized metadata |
-| `plugin`, `theme`, `update` | Native package installation, activation, and updates |
+| `user meta` | Manage authorized metadata while protecting roles, authentication and sessions |
+| `term meta` | Read every stored term field; retain per-key write authorization |
+| `cron` | List events/schedules, schedule tasks, run or delete selected occurrences |
+| `plugin`, `theme`, `update` | Inspect plugins/current theme; install, activate, deactivate and update packages |
 | `file list/read/search` | Read-only source inspection under wp-content |
 | `rest request`, `ability` | Discover and call core/plugin routes and registered abilities |
 | `design guide` | Focused WordPress design guidance |
@@ -27,6 +29,8 @@ File scans return `next_cursor` after result, byte, entry, or time limits: repea
 Licenses and verified trials belong to the administrator who activates them. A license owner can share access with selected administrators on that site; multiple owners and overlapping shares are supported. Other administrators can see Guest Key but need their own entitlement or shared access to create a key. Existing license products and site limits are unchanged.
 
 Permission to edit a post grants read access to all its stored metadata and permits custom-field writes, including unregistered underscore (`_`) keys. Registered/native field authorization, readonly schemas, validation, and sanitization still apply to writes. Missing keys remain distinct from empty values. REST, MCP, Abilities, and combined `post save` share this policy. Plugin-specific form validation and derived-data rebuilding require the plugin’s own API or UI.
+
+User management permits listing and basic profile edits through the API. Account creation/deletion and role, password, email, authentication, or permission changes require a normal administrator session. Temporary browser sessions cannot use account-editing screens. User-meta credential/permission protections remain enforced. Cron runs existing callbacks synchronously and preserves recurrence; callback effects are not rolled back on failure.
 
 Access follows the issuing administrator’s permissions. No direct file writes, shell, or SQL console. Native installs and updates remain available. Expiration stops future requests; it does not undo changes. Build new websites locally.
 

@@ -3,7 +3,7 @@
  * Plugin Name: Guest Key
  * Plugin URI: https://elod.in
  * Description: One-click administrator access for your AI, lasting two hours by default, through native WordPress APIs, MCP, and temporary browser sessions.
- * Version: 0.2.5
+ * Version: 0.2.6
  * Author: Jon Schroeder
  * Author URI: https://elod.in
  * Update URI: https://github.com/jonschr/guest-key
@@ -15,7 +15,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'GUEST_KEY_VERSION', '0.2.5' );
+define( 'GUEST_KEY_VERSION', '0.2.6' );
 define( 'GUEST_KEY_FILE', __FILE__ );
 define( 'GUEST_KEY_DIR', __DIR__ );
 
@@ -44,6 +44,7 @@ require_once __DIR__ . '/includes/class-guest-key-admin-abilities.php';
 require_once __DIR__ . '/includes/class-guest-key-content-abilities.php';
 require_once __DIR__ . '/includes/class-guest-key-data-abilities.php';
 require_once __DIR__ . '/includes/class-guest-key-files.php';
+require_once __DIR__ . '/includes/class-guest-key-cron.php';
 require_once __DIR__ . '/includes/class-guest-key-package-abilities.php';
 require_once __DIR__ . '/includes/class-guest-key-admin.php';
 

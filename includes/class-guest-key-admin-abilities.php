@@ -77,6 +77,8 @@ final class Guest_Key_Admin_Abilities {
 	}
 
 	private static function dispatch_request( $request ) {
+		$policy = Guest_Key_Browser::user_request_policy( $request );
+		if ( is_wp_error( $policy ) ) { return rest_convert_error_to_response( $policy ); }
 		// Internal dispatch skips the response stage used by HTTP and core batch requests.
 		return apply_filters( 'rest_post_dispatch', rest_do_request( $request ), rest_get_server(), $request );
 	}
