@@ -162,30 +162,40 @@
 				focus = form(s.email, 'email', s.sendCode, async email => { await request('guest_key_license_email', {email, fresh: editEmail ? '1' : '0'}); licenseNotice(s.codeSent); }, emailColumn);
 			}
 		}
+		const licenseActions = document.createElement('p');
 		if (licensing?.kind === 'paid') {
-			action(s.checkLicense, async () => { await request('guest_key_license_status'); licenseNotice(); });
-			action(s.removeLicense, async () => { await request('guest_key_license_remove'); licenseNotice(); });
+			licensePanel.append(licenseActions);
+			if (!licensing.ownActive) action(s.checkLicense, async () => { await request('guest_key_license_status'); licenseNotice(); }, licenseActions);
+			action(s.removeLicense, async () => { await request('guest_key_license_remove'); licenseNotice(); }, licenseActions);
 		} else {
 			const input = form(s.licenseKey, 'text', s.activateLicense, async key => { await request('guest_key_license_activate', {key}); licenseNotice(s.licenseActive); }, keyColumn);
 			focus ||= input;
 		}
 		if (licensing?.kind === 'paid' && licensing.administrators?.length) {
-			const fieldset = document.createElement('fieldset');
-			const legend = document.createElement('legend'); legend.textContent = s.shareLicense;
+			const sharing = document.createElement('section');
+			const sharingHeading = document.createElement('h3'); sharingHeading.textContent = s.shareLicense; sharingHeading.id = 'guest-key-sharing-title';
+			sharing.setAttribute('aria-labelledby', sharingHeading.id);
 			const description = document.createElement('p'); description.textContent = s.shareIntro;
-			fieldset.append(legend, description);
+			sharing.append(sharingHeading, description);
 			const choices = [];
 			licensing.administrators.forEach(admin => {
 				const label = document.createElement('label');
 				const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.value = admin.id; checkbox.checked = admin.shared;
+				checkbox.addEventListener('change', () => run(async () => {
+					const saved = licensing.administrators.filter(admin => admin.shared).map(admin => Number(admin.id));
+					try {
+						const users = choices.filter(input => input.checked).map(input => Number(input.value));
+						await request('guest_key_license_share', {users: JSON.stringify(users)});
+						feedback.textContent = s.sharingSaved;
+					} catch (error) {
+						choices.forEach(input => { input.checked = saved.includes(Number(input.value)); });
+						throw error;
+					}
+				}));
 				choices.push(checkbox); label.append(checkbox, ' ', admin.name);
-				const row = document.createElement('p'); row.append(label); fieldset.append(row);
+				const row = document.createElement('p'); row.append(label); sharing.append(row);
 			});
-			action(s.saveSharing, async () => {
-				const users = choices.filter(input => input.checked).map(input => Number(input.value));
-				await request('guest_key_license_share', {users: JSON.stringify(users)}); licenseNotice(s.sharingSaved, false, false);
-			}, fieldset);
-			licensePanel.append(fieldset);
+			licensePanel.append(sharing);
 		}
 		if (licensing?.legacyClaim) {
 			const explanation = document.createElement('p'); explanation.textContent = s.claimIntro; licensePanel.append(explanation);
@@ -194,16 +204,23 @@
 		const checkout = document.createElement('a'); checkout.textContent = licensing?.kind === 'paid' ? (licensing.ownActive ? s.manageBilling : s.renewLicense) : s.buyLicense;
 		checkout.href = licensing?.kind === 'paid' ? licensing.renew : licensing.checkout;
 		checkout.className = 'button';
-		if (licensing?.kind !== 'paid') {
-			const icon = document.createElement('span'); icon.textContent = '↗'; icon.setAttribute('aria-hidden', 'true');
-			checkout.append(' ', icon);
-		}
-		checkout.target = '_blank'; checkout.rel = 'noopener noreferrer'; (licensing?.kind === 'paid' ? licensePanel : keyColumn).append(checkout);
+		checkout.setAttribute('aria-label', s.opensNewTab.replace('%s', checkout.textContent));
+		const icon = document.createElement('span'); icon.textContent = '↗'; icon.setAttribute('aria-hidden', 'true');
+		checkout.append(' ', icon);
+		checkout.target = '_blank'; checkout.rel = 'noopener noreferrer'; (licensing?.kind === 'paid' ? licenseActions : keyColumn).append(checkout);
 		if (licensing?.email && licensing?.kind === 'trial') {
 			const match = document.createElement('p'); match.textContent = s.automaticLicense.replace('%s', licensing.email); licensePanel.append(match);
 		}
 		positionStatus();
 		if (takeFocus) focus?.focus();
+	}
+
+	function requireLicense(message) {
+		licenseNotice(message);
+		if (licenseSettings) {
+			licenseSettings.scrollIntoView({block: 'center'});
+			status(message, true);
+		}
 	}
 
 	function setBusy(value) {
@@ -295,8 +312,15 @@
 		if (busy) return;
 		if (!licensing?.active) {
 			setBusy(true);
+			status(s.working);
 			try { await request('guest_key_license_status'); } catch { /* Manual entry remains available. */ }
-			setBusy(false); licenseNotice(); return;
+			setBusy(false);
+			if (!licensing?.active) {
+				const message = licensing?.kind === 'paid' ? (licensing.expired ? s.licenseExpired : s.licenseCheckNeeded)
+					: licensing?.expired ? (licensing.email ? s.trialExpiredEmail.replace('%s', licensing.email) : s.trialExpired)
+						: licensing?.pending ? s.codeSent.replace('%s', licensing.email) : s.licenseRequired;
+				requireLicense(message); return;
+			}
 		}
 		closeDialog();
 		setBusy(true);
@@ -322,16 +346,12 @@
 			const grantStatus = document.getElementById('guest-key-grant-status');
 			if (grantStatus) grantStatus.textContent = expiryMessage(data.expires);
 			updateRevokeState(true);
-			const adapterStatus = document.getElementById('guest-key-adapter-status');
-			if (adapterStatus) adapterStatus.textContent = data.mcp.ready ? s.active : s.mcpUnavailable;
-			const endpoint = document.getElementById('guest-key-mcp-endpoint');
-			if (endpoint) endpoint.hidden = !data.mcp.ready;
 			if (copied) confirmCopy();
 			status(`${copied ? s.copied : s.created} ${expiryMessage(data.expires)}${data.mcp.ready ? '' : ` ${s.mcpUnavailable}`}`, false);
 			if (!copied) fallback(data.bundle, data.expires);
 		} catch (error) {
 			setBusy(false);
-			if (error.licensing) licenseNotice(error.message);
+			if (error.licensing) requireLicense(error.message);
 			else status(error.message || s.error, true);
 		}
 	}
@@ -341,15 +361,11 @@
 		if (busy) return;
 		setBusy(true);
 		try {
-			const data = await request('guest_key_revoke');
+			await request('guest_key_revoke');
 			closeDialog();
 			const grantStatus = document.getElementById('guest-key-grant-status');
 			if (grantStatus) grantStatus.textContent = s.revoked;
 			updateRevokeState(false);
-			const adapterStatus = document.getElementById('guest-key-adapter-status');
-			if (adapterStatus) adapterStatus.textContent = data.adapter_active ? s.active : s.inactive;
-			const endpoint = document.getElementById('guest-key-mcp-endpoint');
-			if (endpoint) endpoint.hidden = !data.adapter_active;
 			setBusy(false);
 			status(s.revoked);
 		} catch (error) {

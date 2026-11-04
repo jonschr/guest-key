@@ -1,5 +1,12 @@
 # Changes
 
+## 0.2.7 — 2026-11-04
+
+- Save license sharing automatically, group billing with license actions, and hide manual checks for active owned licenses.
+- Remove the redundant Connection details section from settings; retain the copied connection bundle and diagnostics.
+- Explain inactive access when Copy Guest Key is clicked, highlight the licensing fields, and retain expired-trial and license guidance.
+- Open Guest Key settings after an individual dashboard activation. Preserve bulk/network activation workflows, updates, and activation errors.
+
 ## 0.2.6 — 2026-10-30
 
 - Add cron event listing, recurrence inspection, scheduling, immediate execution and deletion using native WordPress APIs.

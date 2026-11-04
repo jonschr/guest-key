@@ -4,6 +4,7 @@ defined( 'ABSPATH' ) || exit;
 final class Guest_Key_Admin {
 
 	public static function init() {
+		add_action( 'activated_plugin', array( __CLASS__, 'activated' ), 10, 2 );
 		add_action( 'admin_post_guest_key_save_duration', array( __CLASS__, 'save_duration' ) );
 		add_action( 'admin_menu', array( __CLASS__, 'menu' ) );
 		add_action( 'network_admin_menu', array( __CLASS__, 'network_menu' ) );
@@ -13,6 +14,23 @@ final class Guest_Key_Admin {
 		add_action( 'admin_notices', array( __CLASS__, 'dependency_notice' ) );
 		add_action( 'network_admin_notices', array( __CLASS__, 'dependency_notice' ) );
 		add_action( 'wp_ajax_guest_key_diagnostics', array( __CLASS__, 'ajax_diagnostics' ) );
+	}
+
+	public static function activated( $plugin, $network_wide ) {
+		if ( plugin_basename( GUEST_KEY_FILE ) !== $plugin || $network_wide || ! is_admin() || is_network_admin() || wp_doing_ajax()
+			|| 'plugins.php' !== ( $GLOBALS['pagenow'] ?? '' ) || 'activate' !== ( $_REQUEST['action'] ?? '' )
+			|| ! Guest_Key_Access::administrator() || Guest_Key_Browser::is_guest_session() ) {
+			return;
+		}
+		// Let activation hooks and WordPress error handling finish before changing the success destination.
+		add_filter( 'wp_redirect', array( __CLASS__, 'activation_destination' ) );
+	}
+
+	public static function activation_destination( $location ) {
+		$query = array();
+		wp_parse_str( (string) wp_parse_url( $location, PHP_URL_QUERY ), $query );
+		return strtok( $location, '?' ) === admin_url( 'plugins.php' ) && 'true' === ( $query['activate'] ?? '' ) && ! isset( $query['error'] ) && ! isset( $query['activate-multi'] )
+			? self::page_url() : $location;
 	}
 
 	public static function save_duration() {
@@ -95,7 +113,6 @@ final class Guest_Key_Admin {
 				'revoked' => __( 'Your Guest Key access has been revoked.', 'guest-key' ),
 				'copy' => __( 'Copy connection details', 'guest-key' ), 'close' => __( 'Close', 'guest-key' ),
 				'revoke' => __( 'Revoke now', 'guest-key' ), 'title' => __( 'Guest Key access', 'guest-key' ),
-				'active' => __( 'Ready', 'guest-key' ), 'inactive' => __( 'Setup will be attempted when you create access', 'guest-key' ),
 				'mcpUnavailable' => __( 'MCP unavailable; REST and browser access are ready.', 'guest-key' ),
 				'manualCopy' => __( 'Select and copy these connection details using your browser’s Copy command.', 'guest-key' ),
 				'diagnosticsCopied' => __( 'Diagnostics copied. Share this report with support.', 'guest-key' ),
@@ -106,10 +123,12 @@ final class Guest_Key_Admin {
 				'sharedAccess' => __( 'Access is shared with you by %s.', 'guest-key' ),
 				'shareLicense' => __( 'Share your license', 'guest-key' ),
 				'shareIntro' => __( 'Your license covers only your account unless you select other administrators below.', 'guest-key' ),
-				'saveSharing' => __( 'Save sharing', 'guest-key' ), 'sharingSaved' => __( 'License sharing updated.', 'guest-key' ),
+				'sharingSaved' => __( 'License sharing updated.', 'guest-key' ),
+				'opensNewTab' => __( '%s (opens in a new tab)', 'guest-key' ),
 				'claimExisting' => __( 'Claim existing license or trial', 'guest-key' ),
 				'claimIntro' => __( 'An existing license or trial could not be matched to an administrator. Claim it for your account if you manage it.', 'guest-key' ),
 				'licenseTitle' => __( 'Unlock Guest Key', 'guest-key' ),
+				'licenseRequired' => __( 'Guest Key is not licensed for your account. Enter your license key or email address to continue.', 'guest-key' ),
 				'trialIntro' => __( 'Try every feature free for 3 days. No card required.', 'guest-key' ),
 				'trialExpired' => __( 'Your free trial has ended. Add a license to keep connecting your agent.', 'guest-key' ),
 				/* translators: %s: Email address used for the trial. */
@@ -184,8 +203,6 @@ final class Guest_Key_Admin {
 		$discovery = Guest_Key_Discovery::inventory();
 		$grant = Guest_Key_Access::grant( get_current_user_id() );
 		$active = $grant && $grant['expires'] > time() && (int) $grant['blog_id'] === get_current_blog_id();
-		require_once ABSPATH . 'wp-admin/includes/plugin.php';
-		$adapter = is_plugin_active( Guest_Key_Dependency::PLUGIN ) && ! get_option( 'guest_key_dependency_error' );
 		$available = wp_is_application_passwords_available_for_user( wp_get_current_user() ) && current_user_can( 'create_app_password', get_current_user_id() );
 		?>
 		<div class="wrap guest-key-page">
@@ -260,18 +277,6 @@ final class Guest_Key_Admin {
 			<p id="guest-key-empty" hidden><?php esc_html_e( 'No matching inventory entries.', 'guest-key' ); ?></p>
 			</section>
 			</div>
-			<details class="guest-key-details">
-				<summary><?php esc_html_e( 'Connection details', 'guest-key' ); ?></summary>
-				<div class="guest-key-details-content">
-					<p><strong><?php esc_html_e( 'WordPress REST API:', 'guest-key' ); ?></strong></p>
-					<p><code class="guest-key-endpoint"><?php echo esc_html( rest_url() ); ?></code></p>
-					<p><strong><?php esc_html_e( 'Optional MCP:', 'guest-key' ); ?></strong> <span id="guest-key-adapter-status"><?php echo $adapter ? esc_html__( 'Ready', 'guest-key' ) : esc_html__( 'Setup will be attempted when you create access', 'guest-key' ); ?></span></p>
-					<p id="guest-key-mcp-endpoint"<?php echo $adapter ? '' : ' hidden'; ?>><code class="guest-key-endpoint"><?php echo esc_html( Guest_Key_Access::endpoint() ); ?></code></p>
-					<p><a href="<?php echo esc_url( Guest_Key_Browser::url() ); ?>"><?php esc_html_e( 'Guest Key browser sign-in', 'guest-key' ); ?></a></p>
-					<p class="description"><?php esc_html_e( 'The copied details include everything your agent needs. REST commands and browser sign-in work independently of optional MCP setup.', 'guest-key' ); ?></p>
-					<p class="description"><?php esc_html_e( 'If a connection fails, check the expiry and confirm your host or security plugin allows WordPress REST requests and application passwords.', 'guest-key' ); ?></p>
-				</div>
-			</details>
 			<details id="guest-key-diagnostics" class="guest-key-details">
 				<summary><?php esc_html_e( 'Diagnostics', 'guest-key' ); ?></summary>
 				<div class="guest-key-details-content">

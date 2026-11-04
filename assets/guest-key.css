@@ -21,7 +21,6 @@
 .guest-key-duration-limits { display: flex; justify-content: space-between; color: #646970; font-size: 12px; }
 #guest-key-duration-value { display: block; margin-bottom: 8px; font-size: 20px; line-height: 1.4; font-weight: 600; }
 .guest-key-duration-row .button { margin: 0; }
-.guest-key-endpoint { overflow-wrap: anywhere; }
 .guest-key-search { display: flex; align-items: center; gap: 12px; margin: 12px 0 8px; }
 .guest-key-search input { flex: 1; min-width: 0; }
 .guest-key-search [role="status"] { flex-shrink: 0; color: #646970; font-size: 12px; }

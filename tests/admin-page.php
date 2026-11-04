@@ -35,7 +35,7 @@ try {
 	$license_fixture = null;
 	$assert( 1 === $x->query( '//button[@data-guest-key-create]' )->length, 'The primary action creates and copies connection details' );
 	$assert( $x->query( '//button[@data-guest-key-revoke]' )->item( 0 )->hasAttribute( 'hidden' ), 'No-access state hides the revoke action' );
-	$assert( 2 === $x->query( '//details' )->length && 0 === $x->query( '//details[@open]' )->length, 'Only connection details and diagnostics are collapsed below the main layout' );
+	$assert( 1 === $x->query( '//details' )->length && 1 === $x->query( '//details[@id="guest-key-diagnostics"]' )->length && 0 === $x->query( '//details[@open]' )->length, 'Only diagnostics is collapsed below the main layout' );
 	$assert( 1 === $x->query( '//button[@data-guest-key-diagnostics]' )->length && $x->query( '//textarea[@id="guest-key-diagnostic-report"]' )->item( 0 )->hasAttribute( 'readonly' ), 'Diagnostics offer a copy action and a manual-copy report' );
 	$assert( false !== strpos( $x->query( '//section[@aria-labelledby="guest-key-connect-title"]' )->item( 0 )->textContent, 'administrator access' ), 'The connection card explains the scope of access' );
 	$assert( false !== strpos( $x->query( '//section[@aria-labelledby="guest-key-connect-title"]' )->item( 0 )->textContent, 'into your local agent' ), 'The page explains the handoff to a local agent' );
