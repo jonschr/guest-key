@@ -119,7 +119,7 @@
 			setBusy(true); licensePanel.querySelectorAll('button, input').forEach(item => { item.disabled = true; }); feedback.textContent = s.working;
 			try { await callback(); }
 			catch (error) { feedback.textContent = error.message || s.error; }
-			finally { setBusy(false); licensePanel.querySelectorAll('button, input').forEach(item => { item.disabled = false; }); }
+			finally { setBusy(false); licensePanel.querySelectorAll('button, input').forEach(item => { item.disabled = item.hasAttribute('data-guest-key-disabled'); }); }
 		}
 		function action(label, callback, parent = licensePanel) {
 			const button = document.createElement('button'); button.type = 'button'; button.textContent = label;
@@ -171,31 +171,46 @@
 			const input = form(s.licenseKey, 'text', s.activateLicense, async key => { await request('guest_key_license_activate', {key}); licenseNotice(s.licenseActive); }, keyColumn);
 			focus ||= input;
 		}
-		if (licensing?.kind === 'paid' && licensing.administrators?.length) {
+		if (licensing.administrators?.length) {
 			const sharing = document.createElement('section');
-			const sharingHeading = document.createElement('h3'); sharingHeading.textContent = s.shareLicense; sharingHeading.id = 'guest-key-sharing-title';
+			const sharingHeading = document.createElement('h3'); sharingHeading.textContent = licensing.kind === 'paid' ? s.shareLicense : s.administrators; sharingHeading.id = 'guest-key-sharing-title';
 			sharing.setAttribute('aria-labelledby', sharingHeading.id);
-			const description = document.createElement('p'); description.textContent = s.shareIntro;
+			const description = document.createElement('p'); description.textContent = s.visibilityIntro;
 			sharing.append(sharingHeading, description);
 			const choices = [];
+			function syncChoices() {
+				choices.forEach(({share, hide, id}) => {
+					const admin = licensing.administrators.find(admin => admin.id === id);
+					share.checked = !!admin?.shared; hide.checked = !!admin?.hidden;
+					if (licensing.kind !== 'paid' || admin?.hidden) share.setAttribute('data-guest-key-disabled', '');
+					else share.removeAttribute('data-guest-key-disabled');
+					share.disabled = share.hasAttribute('data-guest-key-disabled');
+				});
+			}
+			function saveChoices(action, values, message) {
+				return run(async () => {
+					try { await request(action, values); feedback.textContent = message; }
+					finally { syncChoices(); }
+				});
+			}
 			licensing.administrators.forEach(admin => {
-				const label = document.createElement('label');
-				const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.value = admin.id; checkbox.checked = admin.shared;
-				checkbox.addEventListener('change', () => run(async () => {
-					const saved = licensing.administrators.filter(admin => admin.shared).map(admin => Number(admin.id));
-					try {
-						const users = choices.filter(input => input.checked).map(input => Number(input.value));
-						await request('guest_key_license_share', {users: JSON.stringify(users)});
-						feedback.textContent = s.sharingSaved;
-					} catch (error) {
-						choices.forEach(input => { input.checked = saved.includes(Number(input.value)); });
-						throw error;
-					}
-				}));
-				choices.push(checkbox); label.append(checkbox, ' ', admin.name);
-				const row = document.createElement('p'); row.append(label); sharing.append(row);
+				const row = document.createElement('div'); row.className = 'guest-key-admin-row';
+				row.setAttribute('role', 'group'); row.setAttribute('aria-label', admin.name);
+				const name = document.createElement('strong'); name.textContent = admin.name; row.append(name);
+				function choice(label, attribute) {
+					const field = document.createElement('label');
+					const input = document.createElement('input'); input.type = 'checkbox'; input.value = admin.id; input.setAttribute(attribute, '');
+					field.append(input, ' ', label); row.append(field); return input;
+				}
+				const share = choice(s.shareAccess, 'data-guest-key-share');
+				const hide = choice(s.hideToolbar, 'data-guest-key-hide');
+				share.addEventListener('change', () => saveChoices('guest_key_license_share', {
+					users: JSON.stringify(choices.filter(item => item.share.checked).map(item => item.id))
+				}, s.sharingSaved));
+				hide.addEventListener('change', () => saveChoices('guest_key_license_visibility', {user: String(admin.id), hidden: hide.checked ? '1' : '0'}, s.visibilitySaved));
+				choices.push({share, hide, id: admin.id}); sharing.append(row);
 			});
-			licensePanel.append(sharing);
+			syncChoices(); licensePanel.append(sharing);
 		}
 		if (licensing?.legacyClaim) {
 			const explanation = document.createElement('p'); explanation.textContent = s.claimIntro; licensePanel.append(explanation);

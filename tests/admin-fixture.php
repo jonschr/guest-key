@@ -7,6 +7,7 @@ defined( 'ABSPATH' ) || exit;
 if ( ! in_array( wp_get_environment_type(), array( 'local', 'development' ), true ) ) { return; }
 add_action( 'init', static function () {
 	register_post_type( 'guest_key_test', array( 'label' => 'Guest Key test content', 'public' => true, 'show_in_rest' => true, 'rest_base' => 'guest-key-test-content', 'supports' => array( 'title', 'editor', 'revisions' ) ) );
+	register_post_meta( 'guest_key_test', 'gk_explicit_denied', array( 'type' => 'integer', 'single' => true, 'auth_callback' => '__return_false' ) );
 } );
 add_filter( 'plugins_api', static function ( $result, $action, $args ) {
 	if ( 'plugin_information' === $action && 'guest-key-admin-test' === ( $args->slug ?? '' ) ) {

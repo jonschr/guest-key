@@ -10,6 +10,8 @@
 
 ## Licensing scope
 
+Toolbar visibility is a site-scoped preference, not an account permission. Hidden administrators cannot receive shared entitlement from any owner; hiding removes existing shares without changing their own license. Keep settings and the Plugins list available. Visibility changes require a normal administrator session and cannot target the acting administrator.
+
 Licenses, trials, pending verification, and purchase matching are scoped to the owning WordPress administrator on the current site. Use `Guest_Key_License::option_name()` and `pending_name()` for current storage; the `OPTION`/`PENDING` constants refer only to legacy site-wide migration. Owner-controlled `shared_users` grants access without transferring license management. Authorization during native authentication must receive an explicit user ID and perform no network/capability/current-user resolution. Keep license controls visible to unlicensed administrators, but never issue credentials without their own or shared entitlement.
 
 ## Post metadata read policy

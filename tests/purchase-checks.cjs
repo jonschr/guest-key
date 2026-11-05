@@ -46,7 +46,7 @@ function browser(license = trial, hidden = false, settings = false) {
    codeSent: 'We sent a six-digit code to %s. Your trial starts after verification.', working: 'Working…',
    automaticLicense: 'Purchasing with %s? Your license will connect automatically.',
    opensNewTab: '%s (opens in a new tab)', manageBilling: 'Manage billing', renewLicense: 'Renew license', checkLicense: 'Check again', removeLicense: 'Remove my license',
-   shareLicense: 'Share your license', sharingSaved: 'License sharing updated.',
+   shareLicense: 'Share your license', visibilitySaved: 'Toolbar visibility updated.', sharingSaved: 'License sharing updated.',
    licenseKey: 'License key', email: 'Email address', code: 'Six-digit email code', error: 'Could not prepare access.'
   }, licensing: license, settingsUrl: '/settings', ajaxUrl: '/ajax' },
   document, window, location: { assign: url => redirects.push(url) }, URLSearchParams,
@@ -54,7 +54,7 @@ function browser(license = trial, hidden = false, settings = false) {
   Date: class extends Date { constructor(...args) { super(...(args.length ? args : [now])); } static now() { return now; } },
   setInterval() {}, setTimeout() {}, clearTimeout() {},
   fetch: (url, options) => new Promise((resolve, reject) => requests.push({
-   action: options.body.get('action'), users: options.body.get('users'), reject,
+   action: options.body.get('action'), users: options.body.get('users'), user: options.body.get('user'), hidden: options.body.get('hidden'), reject,
    finish: (licensing, success = true, message) => resolve({ ok: success, json: async () => ({ success, data: { licensing, message } }) })
   }))
  });
@@ -98,7 +98,7 @@ test('active owned licenses group billing with removal and give sharing a headin
 test('sharing checkbox changes save automatically without rebuilding or moving focus', async () => {
  const license = {...paid, ownActive: true, administrators: [{id: 2, name: 'Brian', shared: false}, {id: 3, name: 'Alex', shared: true}]};
  const b = browser(license, false, true);
- const choices = b.panel.querySelectorAll('input');
+ const choices = b.panel.querySelectorAll('input').filter(node => node.hasAttribute('data-guest-key-share'));
  b.document.activeElement = choices[0]; choices[0].checked = true;
  const save = choices[0].events.change();
  assert.ok(choices.every(node => node.disabled));
@@ -110,7 +110,7 @@ test('sharing checkbox changes save automatically without rebuilding or moving f
  assert.equal(b.panel.children[2].textContent, 'License sharing updated.');
  assert.equal(b.document.activeElement, choices[0]);
  assert.ok(choices.every(node => !node.disabled));
- assert.equal(b.panel.querySelectorAll('input')[0], choices[0]);
+ assert.equal(b.panel.querySelectorAll('input').filter(node => node.hasAttribute('data-guest-key-share'))[0], choices[0]);
  choices[0].checked = false;
  const remove = choices[0].events.change(); await settle();
  assert.deepEqual(JSON.parse(b.requests[1].users), [3]);
@@ -120,7 +120,7 @@ test('sharing checkbox changes save automatically without rebuilding or moving f
 
 test('failed sharing saves restore the saved selection and report the error', async () => {
  const b = browser({...paid, ownActive: true, administrators: [{id: 2, name: 'Brian', shared: true}]}, false, true);
- const checkbox = b.panel.querySelectorAll('input')[0];
+ const checkbox = b.panel.querySelectorAll('input').filter(node => node.hasAttribute('data-guest-key-share'))[0];
  checkbox.checked = false;
  const save = checkbox.events.change(); await settle();
  b.requests[0].reject(new Error('Could not save sharing. Please retry.')); await save;
@@ -244,4 +244,38 @@ test('duration uses readable hours and minutes', () => {
  for (const [minutes, label] of [[30, '30 minutes'], [60, '1 hour'], [75, '1 hour 15 minutes'], [120, '2 hours'], [135, '2 hours 15 minutes'], [1440, '24 hours']]) {
   assert.equal(b.ui.durationLabel(minutes), label);
  }
+});
+
+test('hiding an administrator saves immediately and clears/disables sharing', async () => {
+ const license={...paid, ownActive:true, administrators:[{id:2,name:'Brian',shared:true,hidden:false}]};
+ const b=browser(license,false,true);
+ const [share,hide]=b.panel.querySelectorAll('input');
+ hide.checked=true; const save=hide.events.change(); await settle();
+ assert.equal(b.requests[0].action,'guest_key_license_visibility');
+ assert.equal(b.requests[0].user,'2'); assert.equal(b.requests[0].hidden,'1');
+ b.requests[0].finish({...license,administrators:[{id:2,name:'Brian',shared:false,hidden:true}]}); await save;
+ assert.equal(share.checked,false); assert.equal(share.disabled,true); assert.equal(hide.disabled,false);
+ assert.equal(b.panel.children[2].textContent,'Toolbar visibility updated.');
+ hide.checked=false; const show=hide.events.change(); await settle();
+ assert.equal(b.requests[1].hidden,'0');
+ b.requests[1].finish({...license,administrators:[{id:2,name:'Brian',shared:false,hidden:false}]}); await show;
+ assert.equal(share.disabled,false); assert.equal(share.checked,false);
+});
+
+test('failed visibility saves restore both controls and permit retry', async () => {
+ const b=browser({...paid, ownActive:true,administrators:[{id:2,name:'Brian',shared:true,hidden:false}]},false,true);
+ const [share,hide]=b.panel.querySelectorAll('input'); hide.checked=true;
+ const save=hide.events.change(); await settle(); b.requests[0].reject(new Error('Could not save.')); await save;
+ assert.equal(hide.checked,false); assert.equal(share.checked,true); assert.equal(share.disabled,false);
+ assert.equal(b.panel.children[2].textContent,'Could not save.');
+});
+
+test('unlicensed administrators can manage visibility without granting sharing', async () => {
+ const license={kind:'',active:false,administrators:[{id:2,name:'Brian',shared:false,hidden:false}]};
+ const b=browser(license,false,true);
+ const inputs=b.panel.querySelectorAll('input'); const share=inputs.find(n=>n.hasAttribute('data-guest-key-share')); const hide=inputs.find(n=>n.hasAttribute('data-guest-key-hide'));
+ assert.equal(share.disabled,true); assert.equal(hide.disabled,undefined);
+ hide.checked=true; const save=hide.events.change(); await settle();
+ b.requests[0].finish({...license,administrators:[{id:2,name:'Brian',shared:false,hidden:true}]}); await save;
+ assert.equal(share.disabled,true); assert.equal(hide.checked,true);
 });

@@ -74,6 +74,18 @@ try {
 	$custom = $call( 'manage-content', array( 'method' => 'POST', 'path' => '/wp/v2/guest-key-test-content', 'parameters' => array( 'title' => 'Guest Key custom post test', 'status' => 'draft' ) ) );
 	$assert( ! is_wp_error( $custom ) && 201 === $custom['status'], 'REST-enabled custom post types are supported' );
 	$posts[] = $custom['data']['id'];
+	$reference = $call( 'manage-post-meta', array( 'action' => 'update', 'post_id' => $custom['data']['id'], 'key' => '_file', 'value' => 'field_67e3660e17e30' ) );
+	$assert( ! is_wp_error( $reference ), 'MCP can save an unregistered protected ACF-style field reference' );
+	$previous = $call( 'manage-post-meta', array( 'action' => 'update', 'post_id' => $custom['data']['id'], 'key' => 'file', 'value' => 15284 ) );
+	$assert( ! is_wp_error( $previous ), 'MCP can save an unregistered document attachment reference' );
+	$changed_file = $call( 'manage-post-meta', array( 'action' => 'update', 'post_id' => $custom['data']['id'], 'key' => 'file', 'value' => 15462 ) );
+	$assert( ! is_wp_error( $changed_file ) && 15462 === (int) $changed_file['values'][0], 'MCP updates the existing document reference without replacing the post' );
+	$read_file = $call( 'manage-post-meta', array( 'action' => 'get', 'post_id' => $custom['data']['id'], 'key' => 'file' ) );
+	$assert( ! is_wp_error( $read_file ) && 15462 === (int) $read_file['values'][0], 'MCP reads back the updated document reference' );
+	$read_reference = $call( 'manage-post-meta', array( 'action' => 'get', 'post_id' => $custom['data']['id'], 'key' => '_file' ) );
+	$assert( ! is_wp_error( $read_reference ) && 'field_67e3660e17e30' === $read_reference['values'][0], 'MCP file updates preserve the existing ACF field reference' );
+	$restricted = $call( 'manage-post-meta', array( 'action' => 'update', 'post_id' => $custom['data']['id'], 'key' => 'gk_explicit_denied', 'value' => 15462 ) );
+	$assert( is_wp_error( $restricted ) && false !== strpos( $restricted->get_error_message(), 'metadata_authorization' ), 'MCP retains explicit field restrictions and denial diagnostics' );
 	$list = $call( 'manage-content', array( 'path' => '/wp/v2/posts', 'parameters' => array( 'status' => 'draft', 'per_page' => 1 ) ) );
 	$assert( ! is_wp_error( $list ) && isset( $list['total'], $list['total_pages'] ) && 1 === count( $list['data'] ) && 'draft' === $list['data'][0]['status'], 'GET pagination and status filtering work while totals survive the MCP response' );
 	$term = $call( 'manage-taxonomies', array( 'method' => 'POST', 'path' => '/wp/v2/categories', 'parameters' => array( 'name' => 'Guest Key test ' . wp_generate_password( 8, false ) ) ) );

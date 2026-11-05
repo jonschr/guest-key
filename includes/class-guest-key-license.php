@@ -5,11 +5,12 @@ final class Guest_Key_License {
 
 	const OPTION = 'guest_key_license';
 	const PENDING = 'guest_key_trial_pending';
+	const HIDDEN = 'guest_key_hidden_toolbar_users';
 	const CHECKOUT = 'https://elodin.lemonsqueezy.com/checkout/buy/40b6382a-e891-418c-bf00-69512a7243dd';
 	const RENEW = 'https://app.lemonsqueezy.com/my-orders';
 
 	public static function init() {
-		foreach ( array( 'status', 'email', 'verify', 'activate', 'remove', 'share', 'claim_existing' ) as $action ) {
+		foreach ( array( 'status', 'email', 'verify', 'activate', 'remove', 'share', 'visibility', 'claim_existing' ) as $action ) {
 			add_action( 'wp_ajax_guest_key_license_' . $action, static function () use ( $action ) { self::ajax( $action ); } );
 		}
 		add_action( 'rest_api_init', array( __CLASS__, 'routes' ) );
@@ -77,7 +78,7 @@ final class Guest_Key_License {
 		foreach ( array_unique( array_merge( array( (int) $user_id ), self::owners() ) ) as $owner_id ) {
 			if ( ! $owner_id || ( $owner_id !== (int) $user_id && ! self::admin_role( $owner_id ) ) ) { continue; }
 			$saved = self::record( $owner_id );
-			if ( $owner_id === (int) $user_id || ( 'paid' === ( $saved['kind'] ?? '' ) && in_array( (int) $user_id, $saved['shared_users'] ?? array(), true ) ) ) {
+			if ( $owner_id === (int) $user_id || ( ! self::toolbar_hidden( $user_id ) && 'paid' === ( $saved['kind'] ?? '' ) && in_array( (int) $user_id, $saved['shared_users'] ?? array(), true ) ) ) {
 				$result[ $owner_id ] = $saved;
 			}
 		}
@@ -108,9 +109,9 @@ final class Guest_Key_License {
 			}
 		}
 		$administrators = array();
-		if ( $bound && 'paid' === ( $saved['kind'] ?? '' ) && ! Guest_Key_Browser::is_guest_session() ) {
+		if ( Guest_Key_Access::administrator() && ! Guest_Key_Browser::is_guest_session() ) {
 			foreach ( get_users( array( 'role' => 'administrator', 'blog_id' => get_current_blog_id() ) ) as $admin ) {
-				if ( (int) $admin->ID !== $user_id ) { $administrators[] = array( 'id' => (int) $admin->ID, 'name' => $admin->display_name, 'shared' => in_array( (int) $admin->ID, $saved['shared_users'] ?? array(), true ) ); }
+				if ( (int) $admin->ID !== $user_id ) { $administrators[] = array( 'id' => (int) $admin->ID, 'name' => $admin->display_name, 'hidden' => self::toolbar_hidden( $admin->ID ), 'shared' => ! self::toolbar_hidden( $admin->ID ) && in_array( (int) $admin->ID, $saved['shared_users'] ?? array(), true ) ); }
 			}
 		}
 		return array(
@@ -176,12 +177,40 @@ final class Guest_Key_License {
 		return self::serialized( static function () use ( $users ) { return self::do_share( $users ); } );
 	}
 
+	public static function toolbar_hidden( $user_id ) {
+		return in_array( (int) $user_id, (array) get_option( self::HIDDEN, array() ), true );
+	}
+
+	public static function set_toolbar_hidden( $user_id, $hidden ) {
+		if ( ! Guest_Key_Access::administrator() || Guest_Key_Browser::is_guest_session() ) { return new WP_Error( 'guest_key_forbidden', __( 'Use a normal administrator session to manage visibility.', 'guest-key' ) ); }
+		return self::serialized( static function () use ( $user_id, $hidden ) {
+			if ( ! is_int( $user_id ) || ! is_bool( $hidden ) || $user_id === get_current_user_id() || ! self::admin_role( $user_id ) ) {
+				return new WP_Error( 'guest_key_visibility', __( 'Select another administrator on this site.', 'guest-key' ) );
+			}
+			$ids = array_values( array_diff( (array) get_option( self::HIDDEN, array() ), array( $user_id ) ) );
+			if ( $hidden ) { $ids[] = $user_id; }
+			update_option( self::HIDDEN, $ids, false );
+			if ( self::toolbar_hidden( $user_id ) !== $hidden ) { return new WP_Error( 'guest_key_visibility', __( 'Could not save toolbar visibility. Please retry.', 'guest-key' ) ); }
+			if ( $hidden ) {
+				foreach ( self::owners() as $owner_id ) {
+					$saved = self::record( $owner_id );
+					if ( in_array( $user_id, $saved['shared_users'] ?? array(), true ) ) {
+						$saved['shared_users'] = array_values( array_diff( $saved['shared_users'], array( $user_id ) ) );
+						self::save( $saved, $owner_id );
+					}
+				}
+			}
+			return true;
+		} );
+	}
+
 	private static function do_share( $users ) {
 		$saved = self::record();
 		if ( 'paid' !== ( $saved['kind'] ?? '' ) || ( $saved['site'] ?? '' ) !== self::site() || ! is_array( $users ) ) { return new WP_Error( 'guest_key_license_share', __( 'Only your own paid license can be shared.', 'guest-key' ) ); }
 		$ids = array();
 		foreach ( $users as $id ) {
 			if ( ! is_int( $id ) || $id < 1 || ! self::admin_role( $id ) ) { return new WP_Error( 'guest_key_license_share', __( 'Select only administrators on this site.', 'guest-key' ) ); }
+			if ( self::toolbar_hidden( $id ) ) { return new WP_Error( 'guest_key_license_share', __( 'Show Guest Key in this administrator’s toolbar before sharing access.', 'guest-key' ) ); }
 			if ( $id !== get_current_user_id() ) { $ids[] = $id; }
 		}
 		$saved['shared_users'] = array_values( array_unique( $ids ) );
@@ -432,6 +461,11 @@ final class Guest_Key_License {
 			if ( 'share' === $action ) {
 				$users = wp_unslash( $_POST['users'] ?? '' );
 				return self::share( is_string( $users ) ? json_decode( $users, true ) : null );
+			}
+			if ( 'visibility' === $action ) {
+				$id = wp_unslash( $_POST['user'] ?? '' );
+				$hidden = wp_unslash( $_POST['hidden'] ?? '' );
+				return self::set_toolbar_hidden( is_string( $id ) && ctype_digit( $id ) ? (int) $id : null, '1' === $hidden ? true : ( '0' === $hidden ? false : null ) );
 			}
 			if ( 'claim_existing' === $action ) { return self::claim_existing(); }
 			if ( 'email' === $action ) { return self::email( wp_unslash( $_POST['email'] ?? '' ), '1' === ( $_POST['fresh'] ?? '' ) ); }

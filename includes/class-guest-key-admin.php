@@ -69,7 +69,7 @@ final class Guest_Key_Admin {
 	}
 
 	public static function toolbar( $bar ) {
-		if ( ! Guest_Key_Access::administrator() || Guest_Key_Browser::is_guest_session() ) {
+		if ( ! Guest_Key_Access::administrator() || Guest_Key_Browser::is_guest_session() || Guest_Key_License::toolbar_hidden( get_current_user_id() ) ) {
 			return;
 		}
 		$bar->add_node( array(
@@ -88,7 +88,7 @@ final class Guest_Key_Admin {
 	}
 
 	public static function assets() {
-		if ( ! Guest_Key_Access::administrator() || Guest_Key_Browser::is_guest_session() || ( ! is_admin() && ! is_admin_bar_showing() ) ) {
+		if ( ! Guest_Key_Access::administrator() || Guest_Key_Browser::is_guest_session() || ( ! is_admin() && ( ! is_admin_bar_showing() || Guest_Key_License::toolbar_hidden( get_current_user_id() ) ) ) ) {
 			return;
 		}
 		$url = plugin_dir_url( GUEST_KEY_FILE );
@@ -122,6 +122,11 @@ final class Guest_Key_Admin {
 				'automaticLicense' => __( 'Purchasing with %s? Your license will connect automatically.', 'guest-key' ),
 				'sharedAccess' => __( 'Access is shared with you by %s.', 'guest-key' ),
 				'shareLicense' => __( 'Share your license', 'guest-key' ),
+				'administrators' => __( 'Administrators', 'guest-key' ),
+				'shareAccess' => __( 'Share my license', 'guest-key' ),
+				'hideToolbar' => __( 'Hide from toolbar', 'guest-key' ),
+				'visibilityIntro' => __( 'Hiding Guest Key removes shared access on this site. Settings and individually owned licenses remain available.', 'guest-key' ),
+				'visibilitySaved' => __( 'Toolbar visibility updated.', 'guest-key' ),
 				'shareIntro' => __( 'Your license covers only your account unless you select other administrators below.', 'guest-key' ),
 				'sharingSaved' => __( 'License sharing updated.', 'guest-key' ),
 				'opensNewTab' => __( '%s (opens in a new tab)', 'guest-key' ),

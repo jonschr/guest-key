@@ -3,7 +3,7 @@ defined( 'ABSPATH' ) || exit;
 
 wp_register_ability( 'guest-key/manage-post-meta', Guest_Key_Content_Abilities::args(
 	'Manage post meta and custom fields',
-	'Describe registered field schemas, or read/edit metadata on posts you can edit, including unregistered underscore keys without REST exposure. Reads return all stored fields and distinguish missing keys from empty values. Writes ignore underscore-only denial while honoring native field auth callbacks, capability filters, readonly schemas, value validation and sanitizers/hooks. Plugin-specific form validation is not automatically run. Revisions resolve to their parent. Update replaces all values; add appends; delete removes all values unless a nonempty value filter is given.',
+	'Describe registered field schemas, or read/edit metadata on posts you can edit, including unregistered underscore keys without REST exposure. Reads return all stored fields and distinguish missing keys from empty values. Writes ignore underscore-only denial while honoring native field auth callbacks, capability filters, readonly schemas, value validation and sanitizers/hooks. Authorization failures retain guest_key_content_denied and include a stage distinguishing post access, field authorization, capability checks, and readonly schema restrictions. Plugin-specific form validation is not automatically run. Revisions resolve to their parent. Update replaces all values; add appends; delete removes all values unless a nonempty value filter is given.',
 	'post_meta',
 	array(
 		'action' => array( 'type' => 'string', 'enum' => array( 'describe', 'list', 'get', 'add', 'update', 'delete' ) ),

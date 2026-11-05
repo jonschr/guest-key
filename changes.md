@@ -1,5 +1,10 @@
 # Changes
 
+## 0.2.8 — 2026-11-05
+
+- Normalize numeric-string post IDs in scoped metadata authorization. Add post/field/capability/readonly denial diagnostics without bypassing explicit native field restrictions.
+- Add per-administrator toolbar visibility alongside automatic sharing controls. Hiding removes shared licenses across owners and prevents new shares; individual licenses and settings remain available.
+
 ## 0.2.7 — 2026-11-04
 
 - Save license sharing automatically, group billing with license actions, and hide manual checks for active owned licenses.
