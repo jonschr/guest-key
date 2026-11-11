@@ -1,5 +1,9 @@
 # Changes
 
+## 0.2.9 — 2026-11-11
+
+- Include the client or service information URL in copied User-Agent instructions before the first HTTP request. Preserve agent-neutral wording, unchanged interactive browser user agents, and the fallback for tools without custom headers.
+
 ## 0.2.8 — 2026-11-05
 
 - Normalize numeric-string post IDs in scoped metadata authorization. Add post/field/capability/readonly denial diagnostics without bypassing explicit native field restrictions.

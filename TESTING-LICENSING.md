@@ -1,3 +1,9 @@
+# 0.2.9 release validation — 2026-11-11
+
+Copied instructions now place an agent-neutral User-Agent with a real client/service information URL before command discovery. Browser user agents stay unchanged, tools without custom headers retain their fallback, and the bundle contains no hosting-specific troubleshooting workflow.
+
+On the Cove main development site, 42 browser checks and 25 native REST checks passed across 52 local HTTP requests. This includes the copied bundle's service URL, ordering and client-neutrality assertions, temporary browser sessions and credential expiry/rotation/revocation. Temporary test accounts/content were removed and existing administrator grants preserved. PHP syntax passed across 135 files; release header, runtime version, changelog and static feed agree on 0.2.9. The full unrelated licensing/package/metadata suites were not repeated for this instruction-only change. No customer site or connector deployment is part of this release.
+
 # Release 0.2.8 — 2026-11-05
 
 The exact packaged ZIP installed successfully over 0.2.7 on the isolated Cove release site and passed 547 PHP assertions: metadata argument types/authorization 12, toolbar visibility 28, metadata writes 31, reads 28, content 59, commands 58, authentication 32, roles 44, ownership/sharing 30, licensing 29, automatic licensing 20, settings 22, activation redirects 14, browser sessions 41, diagnostics 13, and native admin/MCP workflows 86. All 17 JavaScript tests passed. All 135 PHP files passed syntax checks; diff whitespace checks passed.

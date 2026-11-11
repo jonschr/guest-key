@@ -57,7 +57,8 @@ try {
 	wp_set_current_user( $uid );
 	$key = guest_key_test_entitled_create( $uid );
 	$assert( ! is_wp_error( $key ) && false !== strpos( $key['bundle'], Guest_Key_Browser::url() ), 'Copied instructions include browser sign-in using the same credential' );
-	$assert( false !== strpos( $key['bundle'], 'User-Agent: <client>/<version> (user-directed AI agent; agent=<agent>; model=<model>)' ) && false !== strpos( $key['bundle'], 'omit unknown fields or /version' ) && false !== strpos( $key['bundle'], 'Keep interactive browser user agents unchanged' ) && false !== strpos( $key['bundle'], 'continue without this header' ), 'Request identification is tool-neutral and optional when unsupported' );
+	$assert( false !== strpos( $key['bundle'], 'User-Agent: <client>/<version> (+<service-info-url>; user-directed AI agent; agent=<agent>; model=<model>)' ) && false !== strpos( $key['bundle'], 'omit unknown fields or /version' ) && false !== strpos( $key['bundle'], 'Keep interactive browser user agents unchanged' ) && false !== strpos( $key['bundle'], 'continue without this header' ), 'Request identification is tool-neutral and optional when unsupported' );
+	$assert( false !== strpos( $key['bundle'], 'real HTTPS page describing your client or service' ) && false !== strpos( $key['bundle'], 'Do not send placeholders' ) && strpos( $key['bundle'], 'User-Agent: ' ) < strpos( $key['bundle'], '1. Discover commands:' ), 'Copied instructions require a real service information URL before discovery' );
 	$assert( false === strpos( $key['bundle'], 'T3Code' ) && false === strpos( $key['bundle'], 't3_environment_read' ) && false === strpos( $key['bundle'], 't3_thread_configuration' ), 'Copied instructions do not require a particular coding client or its internal tools' );
 	$cookies = $login( $key );
 	$response = $http( admin_url(), 'GET', array(), $cookies );
