@@ -1,3 +1,19 @@
+# 0.2.12 release validation — 2026-11-17
+
+The final release source passed 415 checks: filesystem 87, commands 59, duration 39, browser-session HTTP 43, diagnostics 14, roles 44, authentication 42, operations policy 59 and JavaScript 28. This includes native REST code-install/delete denial, command-level self-deactivation denial, duration/metadata protections, real media upload, read-only inventory, canonical source exclusion and public-guide access. Temporary fixture users/content/credentials were removed; saved options, grants and adapter state were preserved or restored. The final cursor HTTP check passed without a retry.
+
+All 135 PHP files passed syntax checks; JavaScript syntax and diff whitespace checks passed. There was no new interactive browser, Safari, older-WordPress or customer-site verification. Package installation, upgrade and public-download verification are recorded in the release notes.
+
+# Agent editing standards and source/code protections — development, 2026-11-17
+
+Copied instructions, default/focused post help and design guides now require editable page content, narrowly scoped HTML exceptions, existing theme tokens and a warning when tokens are missing or unverified. File/code work calls for local development and professional help with a recovery plan: a live-site outage can interrupt the agent’s only repair connection. This is discoverable advice, not server-side page-markup enforcement.
+
+File list/read/search excludes canonical Guest Key implementation paths and their symlink aliases. The plugin root remains traversable to public Markdown guides/skills and the README. Implementation directories are not scanned or listed. Direct file HTTP and command transport checks deny source reads while retaining agent-guide discovery.
+
+Temporary API and browser access loses native plugin/theme/core lifecycle capabilities and package filesystem permission, while normal administrator maintenance remains available. Read-only theme and plugin inventory retains an independent administrator gate. A real temporary-credential media upload passed. Duration changes are denied to temporary API access as well as temporary browser sessions; existing grant lifetime and expiration checks remain enforced. Diagnostics distinguish site-level setup filesystem policy from temporary-access restrictions. These controls cover supported WordPress operations and do not sandbox arbitrary installed plugin PHP.
+
+Passed 87 filesystem, 59 command, 39 duration, 43 browser-session, 42 authentication, 59 operations-policy, 14 diagnostics and 28 JavaScript checks (371 total). Checks include native REST install/delete denial, command-level self-deactivation and raw-duration-option denial, media uploads, existing credential expiry and symlink-source exclusion. The existing cursor HTTP assertion failed once; its rerun passed after adding failure diagnostics, with no cursor algorithm change. Temporary fixtures and adapter state were restored. Changed PHP syntax, JavaScript syntax and whitespace checks passed. No new interactive browser verification, customer-site change or release was performed.
+
 # 0.2.11 release validation — 2026-11-17
 
 The final source passed 28 JavaScript and 265 PHP checks: visibility/restricted settings 36, ownership/sharing 31, licensing 29, settings 22, roles 44, commands 58, diagnostics 13 and authentication 32. Coverage includes the 1.5-second debounce, mutually exclusive radio choices, hidden-to-shared save ordering, restricted-page contents and handler denial, own-license activation, purchased-owner protection, last-saved shared access, legacy sharing, credential revocation and Block Runner guide delivery. Test users, content, credentials and global options were cleaned up or restored. The authentication suite used temporary native adapter activation and restored its prior state afterward.

@@ -12,6 +12,7 @@ final class Guest_Key_Browser {
 		add_action( 'auth_cookie_valid', array( __CLASS__, 'capture_cookie' ), 10, 2 );
 		add_filter( 'determine_current_user', array( __CLASS__, 'validate_session' ), 30 );
 		add_action( 'set_current_user', array( __CLASS__, 'authorize_session' ) );
+		add_filter( 'file_mod_allowed', array( __CLASS__, 'file_mod_allowed' ), 99, 2 );
 		add_filter( 'map_meta_cap', array( __CLASS__, 'restrict_capabilities' ), 99, 4 );
 		add_filter( 'rest_pre_dispatch', array( __CLASS__, 'restrict_user_rest' ), 9, 3 );
 		add_filter( 'attach_session_information', array( __CLASS__, 'inherit_session' ), 90, 2 );
@@ -82,12 +83,17 @@ final class Guest_Key_Browser {
 	}
 
 	public static function restrict_capabilities( $caps, $cap, $user_id, $args ) {
-		$blocked = array( 'edit_files', 'edit_plugins', 'edit_themes', 'create_app_password', 'create_users', 'promote_users', 'promote_user', 'remove_user', 'delete_users', 'delete_user', 'remove_users', 'add_users', 'manage_network_users' );
+		$blocked = array( 'edit_files', 'edit_plugins', 'edit_themes', 'install_plugins', 'upload_plugins', 'update_plugins', 'delete_plugins', 'activate_plugins', 'activate_plugin', 'deactivate_plugin', 'delete_plugin', 'install_themes', 'upload_themes', 'update_themes', 'delete_themes', 'switch_themes', 'update_core', 'manage_network_plugins', 'manage_network_themes', 'upgrade_network', 'create_app_password', 'create_users', 'promote_users', 'promote_user', 'remove_user', 'delete_users', 'delete_user', 'remove_users', 'add_users', 'manage_network_users' );
 		if ( ! in_array( $cap, $blocked, true ) && ! in_array( $cap, array( 'edit_users', 'edit_user' ), true ) ) { return $caps; }
 		$session = self::session( $user_id );
 		$browser = ! empty( $session[ self::SESSION ] );
 		if ( ( Guest_Key_Access::is_guest_request( $user_id ) || $browser ) && ( in_array( $cap, $blocked, true ) || ( $browser && in_array( $cap, array( 'edit_users', 'edit_user' ), true ) ) ) ) { return array( 'do_not_allow' ); }
 		return $caps;
+	}
+
+	public static function file_mod_allowed( $allowed, $context ) {
+		$user_id = $GLOBALS['current_user']->ID ?? 0;
+		return $user_id && ( Guest_Key_Access::is_guest_request( $user_id ) || self::is_guest_session() ) ? false : $allowed;
 	}
 
 	/** Shared by command dispatch and direct REST, including native batch subrequests. */

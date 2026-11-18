@@ -29,7 +29,7 @@ final class Guest_Key_Files {
 	}
 
 	public static function path_schema() {
-		return array( 'type' => 'string', 'maxLength' => 1024, 'description' => 'Path relative to wp-content, e.g. plugins/example/includes. Omit for the content root when listing/searching. No absolute paths or dot segments.' );
+		return array( 'type' => 'string', 'maxLength' => 1024, 'description' => 'Path relative to wp-content, e.g. plugins/example/includes. Omit for the content root when listing/searching. No absolute paths or dot segments. Guest Key implementation files are excluded; its bundled Markdown skills and guides remain readable.' );
 	}
 
 	public static function cursor_schema() {
@@ -46,12 +46,23 @@ final class Guest_Key_Files {
 		foreach ( explode( '/', $path ) as $part ) {
 			if ( in_array( strtolower( $part ), array( '.git', '.svn', '.hg', '.htpasswd' ), true ) || preg_match( '/^(?:\.env(?:\..*)?|wp-config\.php(?:\..*)?)$/i', $part ) ) { return true; }
 		}
+		$absolute = realpath( WP_CONTENT_DIR . '/' . $path );
+		$plugin = realpath( GUEST_KEY_DIR );
+		if ( false !== $absolute && false !== $plugin ) {
+			$absolute = wp_normalize_path( $absolute ); $plugin = wp_normalize_path( $plugin );
+			if ( $absolute === $plugin ) { return false; } // Traverse only to discover public guidance.
+			if ( 0 === strpos( $absolute, $plugin . '/' ) ) {
+				$relative = substr( $absolute, strlen( $plugin ) + 1 );
+				$guidance = preg_match( '#^(?:guides|skills)(?:/|$)#', $relative );
+				return ! ( 'README.md' === $relative || ( $guidance && ( is_dir( $absolute ) || 'md' === strtolower( pathinfo( $absolute, PATHINFO_EXTENSION ) ) ) ) );
+			}
+		}
 		return false;
 	}
 
 	private static function resolve( $path ) {
 		if ( preg_match( '~[\\\\%\x00-\x1f\x7f]|^/|^[a-zA-Z]:|://|(?:^|/)\.{1,2}(?:/|$)~', $path ) ) { return self::error( 'path', 'Use a relative wp-content path without encoded segments, backslashes, streams or dot segments.' ); }
-		if ( self::excluded( $path ) ) { return self::error( 'denied', 'Credential files and version-control directories are excluded.', 403 ); }
+		if ( self::excluded( $path ) ) { return self::error( 'denied', 'This path is excluded from Guest Key file access. Bundled Markdown skills and guides remain available.', 403 ); }
 		clearstatcache( true );
 		$root = realpath( WP_CONTENT_DIR );
 		if ( false === $root ) { return self::error( 'root', 'The content directory is unavailable.', 503 ); }

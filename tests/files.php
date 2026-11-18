@@ -44,6 +44,22 @@ try {
 	symlink( $outside . '/private.txt', $fixture . '/outside-file' ); symlink( $outside, $fixture . '/outside-dir' );
 	symlink( $fixture . '/example.php', $fixture . '/inside-file' ); symlink( $fixture . '/.env', $fixture . '/credential-alias' ); symlink( $fixture, $fixture . '/loop' );
 	$hash = hash_file( 'sha256', $fixture . '/example.php' );
+	$plugin_path = ltrim( substr( wp_normalize_path( realpath( GUEST_KEY_DIR ) ), strlen( wp_normalize_path( realpath( WP_CONTENT_DIR ) ) ) ), '/' );
+	foreach ( array( 'guest-key.php', 'includes', 'includes/class-guest-key-license.php', 'assets/guest-key.js', 'vendor', 'tests' ) as $private ) {
+		$result = $call( 'list-files', array( 'path' => $plugin_path . '/' . $private ) );
+		$assert( is_wp_error( $result ) && 'guest_key_file_denied' === $result->get_error_code(), 'Guest Key implementation path is excluded: ' . $private );
+	}
+	$assert( is_wp_error( $call( 'read-file', array( 'path' => $plugin_path . '/guest-key.php' ) ) ) && is_wp_error( $call( 'search-files', array( 'path' => $plugin_path . '/includes', 'query' => 'license' ) ) ), 'Direct reads and searches cannot expose implementation source' );
+	$public = $call( 'list-files', array( 'path' => $plugin_path ) );
+	$assert( ! is_wp_error( $public ) && ! array_diff( array_column( $public['items'], 'path' ), array( $plugin_path . '/README.md', $plugin_path . '/guides', $plugin_path . '/skills' ) ), 'Plugin root lists only public guidance' );
+	$guide = $call( 'read-file', array( 'path' => $plugin_path . '/guides/design/wordpress.md' ) );
+	$assert( ! is_wp_error( $guide ) && false !== strpos( $guide['content'], 'Block Runner' ), 'Bundled agent skills and instructions remain readable' );
+	$public = $call( 'search-files', array( 'path' => $plugin_path, 'query' => 'Block Runner' ) );
+	$assert( ! is_wp_error( $public ) && count( $public['matches'] ) > 0 && ! array_filter( $public['matches'], static function ( $row ) use ( $plugin_path ) { return 0 !== strpos( $row['path'], $plugin_path . '/guides/' ); } ), 'Searching the plugin finds guidance without implementation matches' );
+	if ( symlink( GUEST_KEY_DIR . '/includes/class-guest-key-license.php', $fixture . '/private-alias.php' ) ) {
+		$assert( is_wp_error( $call( 'read-file', array( 'path' => $relative . '/private-alias.php' ) ) ), 'Canonical paths prevent symlink aliases from reading Guest Key source' );
+		unlink( $fixture . '/private-alias.php' );
+	}
 	$help = wp_get_ability( 'guest-key/help' )->execute( array( 'command' => 'file' ) );
 	$assert( array( 'file list', 'file read', 'file search' ) === $help['commands'], 'Filesystem inspection uses three discoverable commands without new MCP tools' );
 	$r = $call( 'list-files', array( 'path' => $relative ) ); $paths = array_column( $r['items'], 'path' );
@@ -167,10 +183,16 @@ try {
 	$args = array( 'path' => $relative . '/clean', 'query' => 'needle', 'limit' => 1 );
 	$first = $http( 'files/search', $args, $key );
 	$second = $http( 'files/search', array_merge( $args, array( 'cursor' => $first['data']['next_cursor'], 'limit' => 2 ) ), $key );
-	$assert( 200 === $second['status'] && array( 2, 3 ) === array_column( $second['data']['matches'], 'line' ), 'Signed search cursors survive GET URL encoding and HTTP schema validation' );
+	$assert( 200 === $second['status'] && array( 2, 3 ) === array_column( $second['data']['matches'], 'line' ), 'Signed search cursors survive GET URL encoding and HTTP schema validation (HTTP ' . $second['status'] . ', lines ' . wp_json_encode( array_column( $second['data']['matches'] ?? array(), 'line' ) ) . ', code ' . ( $second['data']['code'] ?? 'ok' ) . ')'  );
 	$r = $http( 'files', array( 'path' => $relative . '/boolean', 'depth' => 2, 'search' => '.css', 'limit' => 1 ), $key );
 	$continued = $http( 'files', array( 'path' => $relative . '/boolean', 'depth' => 2, 'search' => '.css', 'limit' => 1, 'cursor' => $r['data']['next_cursor'] ), $key );
 	$assert( 200 === $r['status'] && array( $relative . '/boolean/child/style.css' ) === array_column( $r['data']['items'], 'path' ) && 200 === $continued['status'] && null === $continued['data']['next_cursor'], 'HTTP listing supports depth and resumable cursors' );
+	$r = $http( 'files/read', array( 'path' => $plugin_path . '/includes/class-guest-key-license.php' ), $key );
+	$assert( 403 === $r['status'], 'Authenticated file HTTP cannot read Guest Key implementation' );
+	$r = $http( 'files/read', array( 'path' => $plugin_path . '/guides/design/wordpress.md' ), $key );
+	$assert( 200 === $r['status'] && false !== strpos( $r['data']['content'], 'Block Runner' ), 'Authenticated file HTTP retains public agent guidance' );
+	$r = $http( 'run', array( 'commands' => array( array( 'command' => 'file read', 'input' => array( 'path' => $plugin_path . '/guest-key.php' ) ) ) ), $key, 'POST' );
+	$assert( 200 === $r['status'] && ! $r['data']['ok'] && 'guest_key_file_denied' === $r['data']['error']['code'], 'Command transport cannot bypass source exclusion' );
 	$large = str_repeat( "source fixture line\n", 4000 ); file_put_contents( $fixture . '/large.txt', $large );
 	$reads = array_fill( 0, 3, array( 'command' => 'file read', 'input' => array( 'path' => $relative . '/large.txt', 'length' => 65536 ) ) );
 	$r = $http( 'run', array( 'commands' => $reads ), $key, 'POST' );

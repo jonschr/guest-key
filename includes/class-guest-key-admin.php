@@ -189,6 +189,7 @@ final class Guest_Key_Admin {
 			'application_passwords_available' => wp_is_application_passwords_available_for_user( wp_get_current_user() ),
 			'can_install_plugins' => current_user_can( 'install_plugins' ),
 			'file_mods_allowed' => wp_is_file_mod_allowed( 'guest_key_install_plugin' ),
+			'temporary_access_policy' => array( 'code_package_changes' => false, 'access_duration_changes' => false, 'guest_key_source_reads' => 'Bundled Markdown guides and skills only; implementation excluded.' ),
 			'filesystem_method' => get_filesystem_method(), 'plugins_directory_writable' => is_writable( WP_PLUGIN_DIR ),
 			'update_feed_host' => wp_parse_url( GUEST_KEY_UPDATE_URL, PHP_URL_HOST ),
 			'current_mcp_error' => Guest_Key_Dependency::diagnostic_message( get_option( 'guest_key_dependency_error', '' ) ),

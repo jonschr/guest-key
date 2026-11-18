@@ -22,7 +22,7 @@ For writes, underscore-only protection is not an authorization rule. `can_write_
 
 ## Operations and account boundaries
 
-Expose cron through native scheduling APIs and theme/plugin management through native package APIs. Keep raw lifecycle options protected. Cron run consumes one selected occurrence and preserves recurrence; it executes existing registered callbacks, not arbitrary PHP.
+Expose cron through native scheduling APIs and normal-administrator theme/plugin management through native package APIs. Temporary Guest Key API and browser sessions must not change plugin/theme/core packages, including deactivating or replacing Guest Key, or change the configured access duration. Media uploads remain available. File list/read/search excludes the canonical Guest Key implementation directory and aliases, while retaining traversal to bundled Markdown guides/skills and the public README. Keep raw lifecycle options protected. Cron run consumes one selected occurrence and preserves recurrence; it executes existing registered callbacks, not arbitrary PHP.
 
 Guest Key must not create/delete user accounts or alter roles, passwords, email/authentication or membership permissions. API profile edits are limited to name, first_name, last_name, nickname, description, url and locale. Enforce the shared REST policy in both Guest Key dispatch and direct temporary-session requests, including nested native batches; enforce native account capabilities for temporary browser sessions. Preserve user-meta authentication/permission/session protections. Do not imply this is a sandbox for arbitrary installed plugin code.
 

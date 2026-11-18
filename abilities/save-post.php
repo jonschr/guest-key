@@ -3,7 +3,7 @@ defined( 'ABSPATH' ) || exit;
 
 wp_register_ability( 'guest-key/save-post', array(
 	'label' => 'Save a post with its metadata, terms and image',
-	'description' => 'Create a draft (no id), or update an existing post (id). fields uses post create/update fields. meta maps keys to JSON values; terms maps taxonomy names to existing integer term IDs and replaces those assignments. featured_media sets an existing image attachment, or 0 clears it. Works without REST exposure. Discover fields with post meta describe. Writes are sequential, not atomic: an error may include post_id and completed steps; repair that post rather than recreating it. Plugin-specific derived data may require the plugin API.',
+	'description' => 'Create a draft (no id), or update an existing post (id). fields uses post create/update fields. meta maps keys to JSON values; terms maps taxonomy names to existing integer term IDs and replaces those assignments. featured_media sets an existing image attachment, or 0 clears it. Works without REST exposure. Discover fields with post meta describe. Writes are sequential, not atomic: an error may include post_id and completed steps; repair that post rather than recreating it. Plugin-specific derived data may require the plugin API. Before layout/content writes, load design guide section wordpress for editable-content, theme-token and professional handoff standards.',
 	'category' => 'site',
 	'input_schema' => array( 'type' => 'object', 'properties' => array(
 		'id' => array( 'type' => 'integer', 'minimum' => 1 ),

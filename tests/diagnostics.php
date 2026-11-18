@@ -16,6 +16,7 @@ try {
 	$report = Guest_Key_Admin::diagnostics();
 	$assert( GUEST_KEY_VERSION === $report['guest_key'] && ! empty( $report['wordpress'] ) && ! empty( $report['php'] ), 'Report identifies installed runtime versions' );
 	$assert( isset( $report['adapter']['installed'], $report['file_mods_allowed'], $report['filesystem_method'] ), 'Report includes adapter state and filesystem policy' );
+	$assert( false === $report['temporary_access_policy']['code_package_changes'] && false === $report['temporary_access_policy']['access_duration_changes'], 'Diagnostics distinguish site setup filesystem policy from temporary-access restrictions' );
 	$assert( 'download_failed' === $report['last_mcp_failure']['code'] && false !== strtotime( $report['last_mcp_failure']['time_utc'] ), 'Last failure retains its code and UTC time' );
 	$json = wp_json_encode( $report );
 	foreach ( array( 'private', 'token=secret', 'abcdefghijklmnopqrstuvwxyz', 'ABCDEFGHIJKLMNOPQRSTUVWX', 'abcd efgh ijkl mnop qrst uvwx' ) as $secret ) {

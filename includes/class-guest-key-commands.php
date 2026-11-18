@@ -110,8 +110,12 @@ final class Guest_Key_Commands {
 		if ( '' === $command || 'post' === $command || 0 === strpos( $command, 'post ' ) ) {
 			$result['post_types'] = wp_list_pluck( get_post_types( array(), 'objects' ), 'label' );
 		}
+		if ( '' === $command || 'post' === $command || in_array( $command, array( 'post create', 'post update', 'post save' ), true ) ) {
+			$result['content_guidance'] = 'Before layout or content changes, load design guide with input {"section":"wordpress"}. Never write an entire page as raw HTML or hardcode page content into theme files. Use editable native blocks or the existing builder; reserve small HTML exceptions for specific needs and prefer supported blocks/shortcodes for reusable functionality. Reuse theme style tokens; warn the user if they are missing or cannot be inspected. Recommend a website professional for custom file/code work or unsupported changes, explain the risks to editing and recovery, and generally develop files locally. A live-site outage can cut off the agent’s access before it can repair its work.';
+		}
 		if ( '' === $command ) {
 			$result['conventions'] = array(
+				'access' => 'Temporary Guest Key credentials and browser sessions cannot change code packages or access duration. Media uploads and supported content/settings operations remain available. Guest Key implementation files are excluded from file list/read/search; its bundled Markdown guides and skills remain readable. Normal administrator sessions retain package maintenance.',
 				'parameters' => 'Use exact command schemas. id identifies a post for post commands; post_id identifies its container for post meta; key identifies a metadata field or site option. Options have no post_id. File path is relative to wp-content (plugins/example/file.php), never a server absolute path.',
 				'pagination' => 'File list/search: repeat filters and pass next_cursor as cursor until null; limit controls result count, depth bounds directory levels. File read: next_offset becomes offset; length controls bytes. Post list: page/per_page. Check scan.skipped on every file scan page.',
 				'output' => 'Keep large reads in separate requests and use small pages/chunks. Guest Key does not truncate batches; a client may cap displayed output. After a cutoff, verify completed writes before retrying; batches are not transactions.',

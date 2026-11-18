@@ -10,7 +10,10 @@ final class Guest_Key_Plugin_Abilities {
 	}
 
 	public static function list_plugins( $input ) {
-		return self::request( 'GET', '/wp/v2/plugins', array( 'search' => $input['search'] ?? '' ) );
+		// Inventory has its own administrator gate; do not grant code-activation capabilities for a read.
+		$request = new WP_REST_Request( 'GET', '/wp/v2/plugins' );
+		$request->set_query_params( array( 'search' => $input['search'] ?? '' ) );
+		return ( new WP_REST_Plugins_Controller() )->get_items( $request )->get_data();
 	}
 
 	public static function install_plugin( $input ) {

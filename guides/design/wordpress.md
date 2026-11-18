@@ -2,6 +2,22 @@
 
 Inspect the active theme, the page's editor, templates and existing style presets before choosing an implementation. Preserve the editing model the site uses. Design advice is builder-independent; storage formats and save workflows are not.
 
+## Keep page content editable
+
+Never replace an entire page with raw HTML or one Custom HTML block. Store page copy and layouts in the site's supported editor: native blocks or the existing builder's editable content model. Never hardcode page content into theme templates, theme files, or generated theme code. Templates provide shared structure; page content belongs in WordPress content storage.
+
+A small raw HTML block can be justified inside an otherwise editable page when native controls cannot represent that specific element. Keep the exception narrow and explain what the owner cannot edit through normal controls. For reusable or functional elements, prefer an existing supported block or shortcode. A new custom block or shortcode requires a maintained plugin implementation and professional development; a shortcode string alone does not implement it.
+
+## Reuse theme tokens first
+
+For new layouts and content changes, inspect the active theme and effective user/global styles first. Reuse existing named color, typography, spacing and width tokens, or the builder's equivalent presets. Do not invent a parallel palette, font scale or spacing system for one page. If no suitable tokens exist, or your tools cannot inspect them, tell the user which is missing or unverified before proposing new values. Recommend a website professional when establishing or repairing shared styles requires expertise beyond the current task.
+
+## Know when to involve a website professional
+
+When a task requires custom file writes, theme/plugin code, unsupported editing workflows, or changes you cannot safely verify and recover, recommend help from a website professional. Explain the concrete consequences for this task: lost editor controls, broken layouts or functionality, changes overwritten by updates, or a site outage. Do not quietly substitute a fragile workaround for the supported editing model.
+
+File-writing work should generally happen in a local development copy, followed by testing and a reviewed deployment with a backup and an independent recovery route. If an agent changes live files and the site goes down, it may lose the connection it needs to repair its own work. A user who can access the site only through that agent may then need hosting access or a backup restore from a professional. Continue supported content work where possible; identify the part requiring professional help rather than claiming it is finished.
+
 ## Discover, then write
 
 Use `post describe` to discover post types and `post get` for existing content. On posts you can edit, `post meta list/get` reads all stored metadata, including protected and unregistered fields. Writes also accept unregistered underscore keys; native field authorization callbacks, capability filters, readonly schemas, validation and sanitization still apply. `post meta describe` lists registered schemas, not every stored field. Generic metadata writes do not run plugin-specific editing-form validation. Inspect native REST route schemas with `rest request` and OPTIONS. Use `ability list` and `ability describe` to discover installed providers. Do not infer metadata keys, gallery formats or builder compatibility from a plugin's name.

@@ -1,5 +1,12 @@
 # Changes
 
+## 0.2.12 — 2026-11-17
+
+- Block plugin, theme and WordPress core changes through temporary Guest Key credentials and browser sessions. Preserve normal administrator maintenance, read-only inventory and media uploads.
+- Exclude Guest Key implementation files and canonical symlink aliases from file listing, reading and searching. Keep bundled Markdown guides and skills discoverable.
+- Prevent temporary API access from changing the configured access duration. Distinguish site filesystem setup policy from temporary-access restrictions in diagnostics.
+- Surface professional WordPress editing guidance in connection instructions and command help: editable content, limited HTML exceptions, theme tokens, local code development and recovery planning.
+
 ## 0.2.11 — 2026-11-17
 
 - Give hidden administrators a contact, purchase and own-license activation page. Purchased-license owners always retain the toolbar and full settings.

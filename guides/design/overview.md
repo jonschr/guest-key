@@ -1,6 +1,6 @@
 # Design a site that fits its purpose
 
-Use this workflow before creating or redesigning pages. For a small edit, preserve the site's established visual language and load only the relevant section. The user's brief, real brand assets and observed site take priority over these starting points.
+Use this workflow before creating or redesigning pages. Before any layout or content write, load `design guide` with `input: {"section":"wordpress"}` for the editable-content, theme-token and professional handoff standards. For a small edit, preserve the site's established visual language and load only the relevant section. The user's brief, real brand assets and observed site take priority over these starting points.
 
 1. **Inspect.** Open the current frontend at desktop and mobile sizes. Read representative content and identify the active theme, editor, shared header/footer, fonts, palette and available images. Record what works and what needs changing. Stored markup alone cannot establish visual quality.
 2. **Frame.** State the audience, main visitor task, primary action, content requirements and scope. For missing details, use a clear provisional assumption; ask when the answer would materially change the result. See `brief`.

@@ -18,11 +18,13 @@ Expiration stops future requests. It does not undo changes already made to the s
 
 ## WordPress workflows, without cowboy coding
 
-Guest Key helps your agent do the work you would do through WordPress: update a page, upload an image, change a supported setting, or install an update. It works through native APIs, registered abilities, and the WordPress interface, following the issuing administrator’s permissions and the plugin’s access restrictions.
+Guest Key helps your agent do the work you would do through WordPress: update a page, upload an image, change a supported setting, or organize the media library. It works through native APIs, registered abilities, and the WordPress interface, following the issuing administrator’s permissions and the plugin’s access restrictions.
 
-There is no direct file-writing tool, shell, or SQL console. Your agent can inspect source files to understand the site, then use supported WordPress operations to make changes. Build new websites and custom code locally.
+There is no direct file-writing tool, shell, or SQL console. Your agent can inspect theme and other plugin source to understand the site, then use supported WordPress operations to make changes. Guest Key’s own implementation files are excluded; its public Markdown guides and skill instructions remain readable. Build new websites and custom code locally.
 
-This is administrator access, so it can make meaningful changes. Native plugin and theme installation remains available and can run third-party code; Guest Key does not sandbox installed plugins.
+Temporary Guest Key credentials and browser sessions cannot install, update, delete, activate or deactivate plugins, switch or modify themes, update WordPress core, or change the access duration. Media uploads remain available. Normal administrator sessions retain site maintenance and MCP Adapter setup. These restrictions govern supported WordPress operations; they do not sandbox arbitrary third-party plugin code.
+
+Work that requires writing code files should generally happen locally with a website professional, testing and an independent recovery route. A live-site outage can cut off an agent’s access before it can repair the problem.
 
 ## Choose who can use it
 
@@ -43,7 +45,7 @@ Hidden administrators see a contact, purchase, and license-entry page. Activatin
 | `user meta` | Manage authorized metadata while protecting roles, authentication and sessions |
 | `term meta` | Read every stored term field; retain per-key write authorization |
 | `cron` | List events/schedules, schedule tasks, run or delete selected occurrences |
-| `plugin`, `theme`, `update` | Inspect plugins/current theme; install, activate, deactivate and update packages |
+| `plugin`, `theme`, `update` | Discover package operations; mutations require a normal administrator session and are denied to temporary access |
 | `file list/read/search` | Read-only source inspection under wp-content |
 | `rest request`, `ability` | Discover and call core/plugin routes and registered abilities |
 | `design guide` | Focused WordPress design guidance |

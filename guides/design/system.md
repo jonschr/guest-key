@@ -1,6 +1,6 @@
 # Define a small, coherent visual system
 
-Read the existing presets first. Keep a compact set of named decisions for type, colors, spacing, content widths, borders and component states. Reuse them across pages. The values below are design starting points, not accessibility rules or universal requirements.
+Read the existing theme and user presets first and reuse their named tokens for layout and content changes. If suitable tokens are absent or cannot be inspected, tell the user before proposing new values; do not silently invent a separate design system. Keep a compact set of named decisions for type, colors, spacing, content widths, borders and component states. Reuse them across pages. The values below are design starting points, not accessibility rules or universal requirements.
 
 ## Typography
 

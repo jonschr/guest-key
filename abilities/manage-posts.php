@@ -3,7 +3,7 @@ defined( 'ABSPATH' ) || exit;
 
 wp_register_ability( 'guest-key/manage-posts', Guest_Key_Content_Abilities::args(
 	'Manage native posts and custom post types',
-	'Discover registered post types, or list, read, create, update, trash, restore, and permanently delete their posts. Works without REST exposure. Uses native WordPress permissions and save hooks. Use manage-terms for assignments and manage-post-meta for custom fields. Permanent deletion requires force=true.',
+	'Discover registered post types, or list, read, create, update, trash, restore, and permanently delete their posts. Works without REST exposure. Uses native WordPress permissions and save hooks. Use manage-terms for assignments and manage-post-meta for custom fields. Permanent deletion requires force=true. Before layout/content writes, load design guide section wordpress for editable-content, theme-token and professional handoff standards.',
 	'posts',
 	array(
 		'action' => array( 'type' => 'string', 'enum' => array( 'describe', 'list', 'get', 'create', 'update', 'trash', 'restore', 'delete' ) ),

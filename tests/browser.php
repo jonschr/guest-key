@@ -88,7 +88,8 @@ try {
 	foreach ( $cookies as $cookie ) { $_COOKIE[ $cookie->name ] = rawurldecode( $cookie->value ); }
 	wp_cache_delete( $uid, 'user_meta' ); // HTTP requests updated native session metadata.
 	$assert( Guest_Key_Browser::is_guest_session() && ! current_user_can( 'edit_plugins' ) && ! current_user_can( 'edit_themes' ) && ! current_user_can( 'create_app_password', $uid ), 'Guest browser permissions exclude direct file editing and durable application passwords' );
-	$assert( is_wp_error( guest_key_test_entitled_create( $uid ) ) && current_user_can( 'install_plugins' ) && current_user_can( 'upload_files' ), 'Guest sessions retain native installation/upload permissions without issuing replacement keys' );
+	$assert( is_wp_error( guest_key_test_entitled_create( $uid ) ) && ! current_user_can( 'install_plugins' ) && current_user_can( 'upload_files' ), 'Guest sessions retain media uploads but cannot install code or issue replacement keys' );
+	$assert( is_wp_error( Guest_Key_Access::set_duration( 1440 ) ) && ! wp_is_file_mod_allowed( 'guest_key_package_management' ), 'Guest browser sessions cannot extend duration or modify code packages' );
 	$manager = WP_Session_Tokens::get_instance( $uid );
 	$inherited = $manager->create( time() + DAY_IN_SECONDS );
 	$assert( ! empty( $manager->get( $inherited )[ Guest_Key_Browser::SESSION ] ) && apply_filters( 'auth_cookie_expiration', DAY_IN_SECONDS, $uid, false ) <= Guest_Key_Access::TTL, 'Replacement WordPress sessions inherit the Guest Key binding and remaining expiry' );

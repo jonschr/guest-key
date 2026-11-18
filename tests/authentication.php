@@ -159,7 +159,13 @@ try {
 	$reset( $password );
 	$assert( $uid === get_current_user_id() && Guest_Key_Access::is_guest_request( $uid ), 'Guest Key authenticates through ordinary WordPress REST routes' );
 	$assert( ! current_user_can( 'create_app_password', $uid ) && ! current_user_can( 'edit_plugins' ) && ! current_user_can( 'edit_themes' ), 'Temporary API requests cannot issue durable application passwords or edit files' );
-	$assert( current_user_can( 'edit_posts' ) && current_user_can( 'install_plugins' ), 'Temporary API requests retain ordinary content and package permissions' );
+	$assert( current_user_can( 'edit_posts' ) && ! current_user_can( 'install_plugins' ) && current_user_can( 'upload_files' ), 'Temporary API requests retain content/media access but cannot install code' );
+	$duration_before = Guest_Key_Access::duration();
+	$assert( is_wp_error( Guest_Key_Access::set_duration( 1440 ) ) && Guest_Key_Access::duration() === $duration_before, 'Temporary API access cannot extend the configured duration' );
+	$assert( ! wp_is_file_mod_allowed( 'guest_key_package_management' ), 'Temporary API access cannot use native package filesystem operations' );
+	foreach ( array( 'update_plugins', 'delete_plugins', 'activate_plugins', 'install_themes', 'update_themes', 'delete_themes', 'switch_themes', 'update_core' ) as $capability ) {
+		$assert( ! current_user_can( $capability ), 'Temporary API access denies code lifecycle capability: ' . $capability );
+	}
 	$_GET['rest_route'] = '/wp/v2/users/me';
 	$reset( $password );
 	$request = new WP_REST_Request( 'GET', '/wp/v2/users/me' );

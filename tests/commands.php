@@ -46,6 +46,7 @@ try {
 	$assert( isset( $help['post_types']['gk_command_portfolio'] ) && 'Command test portfolio' === $help['post_types']['gk_command_portfolio'], 'Default help includes the exact dynamically registered post type names and labels' );
 	$post_help = wp_get_ability( 'guest-key/help' )->execute( array( 'command' => 'post' ) );
 	$list_help = wp_get_ability( 'guest-key/help' )->execute( array( 'command' => 'post list' ) );
+	$assert( false !== strpos( $post_help['content_guidance'], 'Never write an entire page as raw HTML' ), 'Post help surfaces editable-content standards before writes' );
 	$assert( isset( $post_help['post_types']['gk_command_portfolio'], $list_help['post_types']['gk_command_portfolio'] ) && false !== strpos( $list_help['input_schema']['properties']['post_type']['description'], 'any' ), 'Post prefix and focused help expose type names and cross-type search guidance' );
 	$help = wp_get_ability( 'guest-key/help' )->execute( array( 'command' => 'post meta update' ) );
 	$assert( ! isset( $help['input_schema']['properties']['action'] ) && isset( $help['input_schema']['properties']['value'] ), 'Focused help returns the existing input schema without a redundant action' );
@@ -129,7 +130,7 @@ try {
 	remove_filter( 'user_has_cap', $deny );
 	$key = guest_key_test_entitled_create( $uid );
 	if ( is_wp_error( $key ) ) { throw new RuntimeException( $key->get_error_message() ); }
-	$assert( false !== strpos( $key['bundle'], '1. Discover commands: GET ' ) && false !== strpos( $key['bundle'], 'use the "design guide" command first' ), 'Copied connection bundle teaches commands and design guide discovery' );
+	$assert( false !== strpos( $key['bundle'], '1. Discover commands: GET ' ) && false !== strpos( $key['bundle'], 'Before layout or content edits, load "design guide"' ), 'Copied connection bundle teaches commands and design guide discovery' );
 	$assert( false !== strpos( $key['bundle'], 'Read-only example: {"commands":[{"command":"post list","input":{"post_type":"any"}}]}' ) && false !== strpos( $key['bundle'], 'Command names are JSON values, not shell commands.' ), 'Connection example discovers content without assuming terminal access or installing a plugin' );
 	$response = $http( 'GET', 'help', $key );
 	$assert( 200 === $response['status'] && in_array( 'post save', $response['data']['commands'], true ), 'Native Basic authentication reaches command help over HTTP' );

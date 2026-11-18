@@ -3,7 +3,7 @@
 require_once __DIR__ . '/user-license-fixture.php';
 if (!defined('WP_CLI') || !WP_CLI || 'local'!==wp_get_environment_type() || !Guest_Key_Access::administrator() || !has_action('gk_operations_fixture')) {throw new RuntimeException('Use the isolated local operations fixture.');}
 require_once ABSPATH.'wp-admin/includes/user.php'; require_once ABSPATH.'wp-admin/includes/plugin.php';
-$owner=get_current_user_id();$uid=null;$term=null;$checks=0;$created_hooks=array();$adapter=is_plugin_active(Guest_Key_Dependency::PLUGIN);$managed=get_option('guest_key_adapter_managed',null);
+$media=null; $owner=get_current_user_id();$uid=null;$term=null;$checks=0;$created_hooks=array();$adapter=is_plugin_active(Guest_Key_Dependency::PLUGIN);$managed=get_option('guest_key_adapter_managed',null);
 $assert=static function($ok,$message)use(&$checks){if(!$ok){throw new RuntimeException($message);}$checks++;echo "PASS: {$message}\n";};
 $run=static function($command,$input=array()){return wp_get_ability('guest-key/run')->execute(array('commands'=>array(array('command'=>$command,'input'=>$input))));};
 $http=static function($method,$route,$key,$body=null){$args=array('method'=>$method,'headers'=>array('Authorization'=>'Basic '.base64_encode($key['username'].':'.$key['password'])),'sslverify'=>false,'redirection'=>0,'timeout'=>20,'user-agent'=>'T3Code (user-directed AI agent; agent=Codex; model=gpt-6.1-sol)');if(null!==$body){$args['headers']['Content-Type']='application/json';$args['body']=wp_json_encode($body);}$r=wp_remote_request(rest_url($route),$args);if(is_wp_error($r)){throw new RuntimeException($r->get_error_message());}return array(wp_remote_retrieve_response_code($r),json_decode(wp_remote_retrieve_body($r),true));};
@@ -36,6 +36,19 @@ try {
  try {foreach(array('create_users','promote_users','promote_user','delete_user') as $cap){$assert(!current_user_can($cap,$owner),'Temporary API credentials lose native capability '.$cap);}$assert(current_user_can('edit_posts'),'Temporary API credentials retain content editing');}
  finally {Guest_Key_Access::authentication_failed();}
  foreach(array(array('POST','wp/v2/users',array('username'=>'forbidden','email'=>'forbidden@example.invalid','password'=>'not-created')),array('POST','wp/v2/users/'.$uid,array('roles'=>array('subscriber'))),array('POST','wp/v2/users/'.$uid,array('password'=>'not-changed')),array('POST','wp/v2/users/'.$uid,array('email'=>'not-changed@example.invalid')),array('DELETE','wp/v2/users/'.$uid,array('force'=>true,'reassign'=>$owner))) as $case){$r=$http($case[0],$case[1],$key,$case[2]);$assert(403===$r[0],'Direct REST denies sensitive user operation: '.$case[0].' '.implode(',',array_keys($case[2])));}
+ $r=$http('POST','guest-key/v1/run',$key,array('commands'=>array(array('command'=>'media upload','input'=>array('filename'=>'guest-key-policy.png','base64'=>'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aJ9sAAAAASUVORK5CYII=')))));
+ $media=$r[1]['results'][0]['data']['id']??null;
+ $assert(200===$r[0]&&!empty($r[1]['ok'])&&is_int($media),'Temporary API access still uploads images into the media library');
+ $inventory=$http('POST','guest-key/v1/run',$key,array('commands'=>array(array('command'=>'plugin list'))));
+ $assert(200===$inventory[0]&&!empty($inventory[1]['ok']),'Read-only plugin inventory does not require code activation permissions');
+ $r=$http('POST','wp/v2/plugins',$key,array('slug'=>'guest-key','status'=>'active'));
+ $assert(403===$r[0],'Direct native REST cannot install or replace Guest Key through temporary access');
+ $r=$http('DELETE','wp/v2/plugins/'.preg_replace('/\.php$/','',Guest_Key_Dependency::PLUGIN),$key,array());
+ $assert(403===$r[0],'Direct native REST cannot delete code through temporary access');
+ $r=$http('POST','guest-key/v1/run',$key,array('commands'=>array(array('command'=>'plugin deactivate','input'=>array('plugin'=>plugin_basename(GUEST_KEY_FILE))))));
+ $assert(200===$r[0]&&!$r[1]['ok'],'Guest Key commands cannot deactivate Guest Key itself');
+ $r=$http('POST','guest-key/v1/run',$key,array('commands'=>array(array('command'=>'option update','input'=>array('key'=>Guest_Key_Access::DURATION_OPTION,'value'=>1440)))));
+ $assert(200===$r[0]&&!$r[1]['ok'],'Temporary commands cannot extend duration via raw options');
  $r=$http('POST','wp/v2/users/'.$uid,$key,array('first_name'=>'Safe profile'));wp_cache_delete($uid,'user_meta');$assert(200===$r[0]&&'Safe profile'===get_user_meta($uid,'first_name',true),'Direct REST retains basic profile edits (HTTP '. $r[0] . ', '.($r[1]['code']??'ok').')');
  $plain=add_query_arg('rest_route','/wp/v2/users/'.$uid,home_url('/'));
  $response=wp_remote_post($plain,array('headers'=>array('Authorization'=>'Basic '.base64_encode($key['username'].':'.$key['password']),'Content-Type'=>'application/json'),'body'=>wp_json_encode(array('first_name'=>'Plain permalink profile')),'sslverify'=>false));
@@ -54,6 +67,7 @@ try {
  wp_set_current_user(0);$assert(is_wp_error(wp_get_ability('guest-key/manage-cron')->execute(array('action'=>'list'))),'Anonymous users cannot inspect cron');
 } finally {
  wp_set_current_user($owner);foreach($created_hooks as $h){wp_unschedule_hook($h,true);}delete_option('gk_operations_result');
+ if(is_int($media)){wp_delete_attachment($media,true);}
  if(is_int($term)){wp_delete_term($term,'category');}if(is_int($uid)){Guest_Key_Access::revoke($uid);wp_delete_user($uid);}unregister_term_meta('category','_gk_operations_denied');
  if($adapter){Guest_Key_Dependency::ensure();}elseif(is_plugin_active(Guest_Key_Dependency::PLUGIN)){deactivate_plugins(Guest_Key_Dependency::PLUGIN);}if(null===$managed){delete_option('guest_key_adapter_managed');}else{update_option('guest_key_adapter_managed',$managed,false);}
 }

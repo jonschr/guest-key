@@ -14,7 +14,7 @@ $guest_key_design_sections = array(
 
 wp_register_ability( 'guest-key/design-guide', array(
 	'label' => 'Website design guide',
-	'description' => 'Load original, builder-independent design guidance before creating or redesigning a page. Omit section for a short workflow and topic index; request a focused section when needed. This is advice, not an automated audit or a site mutation.',
+	'description' => 'Load original, builder-independent design guidance before creating or editing page layouts/content, including editable content, theme tokens and when to involve a website professional. Omit section for a short workflow and topic index; request a focused section when needed. This is advice, not an automated audit or a site mutation.',
 	'category' => 'site',
 	'input_schema' => array( 'type' => 'object', 'properties' => array(
 		'section' => array( 'type' => 'string', 'enum' => array_keys( $guest_key_design_sections ), 'description' => 'Default: overview. Load only the topic needed for the current task.' ),
