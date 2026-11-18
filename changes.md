@@ -1,5 +1,11 @@
 # Changes
 
+## 0.2.10 — 2026-11-17
+
+- Debounce toolbar visibility and license-sharing changes for 500 milliseconds, saving the final selections together and avoiding requests when changes are reversed.
+- Install the official MCP Adapter from WordPress.org’s canonical release ZIP through the native installer, removing the fragile plugin-information URL check.
+- Copy the diagnostics already displayed on screen directly to the clipboard, without waiting for a server request. Retain manual-copy fallback when clipboard access is blocked.
+
 ## 0.2.9 — 2026-11-11
 
 - Include the client or service information URL in copied User-Agent instructions before the first HTTP request. Preserve agent-neutral wording, unchanged interactive browser user agents, and the fallback for tools without custom headers.

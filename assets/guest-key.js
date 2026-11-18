@@ -114,10 +114,11 @@
 		const feedback = document.createElement('p'); feedback.className = 'guest-key-license-feedback';
 		feedback.setAttribute('role', 'status'); feedback.setAttribute('aria-live', 'polite'); feedback.textContent = message === intro.textContent ? '' : message;
 		licensePanel.replaceChildren(heading, intro, feedback);
+		let savePendingChoices = async () => {};
 		async function run(callback) {
 			if (busy) return;
 			setBusy(true); licensePanel.querySelectorAll('button, input').forEach(item => { item.disabled = true; }); feedback.textContent = s.working;
-			try { await callback(); }
+			try { await savePendingChoices(); await callback(); }
 			catch (error) { feedback.textContent = error.message || s.error; }
 			finally { setBusy(false); licensePanel.querySelectorAll('button, input').forEach(item => { item.disabled = item.hasAttribute('data-guest-key-disabled'); }); }
 		}
@@ -187,11 +188,33 @@
 					share.disabled = share.hasAttribute('data-guest-key-disabled');
 				});
 			}
-			function saveChoices(action, values, message) {
-				return run(async () => {
-					try { await request(action, values); feedback.textContent = message; }
-					finally { syncChoices(); }
-				});
+			let saveTimer;
+			savePendingChoices = async () => {
+				if (!saveTimer) return;
+				clearTimeout(saveTimer); saveTimer = null;
+				const visibility = choices.filter(({hide, id}) => hide.checked !== !!licensing.administrators.find(admin => admin.id === id)?.hidden)
+					.map(({hide, id}) => ({id, hidden: hide.checked}));
+				const users = choices.filter(({share, hide}) => share.checked && !hide.checked).map(({id}) => id);
+				let message = '';
+				try {
+					// Hide first: visibility changes remove shares from every license owner.
+					for (const {id, hidden} of visibility) {
+						await request('guest_key_license_visibility', {user: String(id), hidden: hidden ? '1' : '0'});
+						message = s.visibilitySaved;
+					}
+					if (licensing.kind === 'paid' && choices.some(({id}) => users.includes(id) !== !!licensing.administrators.find(admin => admin.id === id)?.shared)) {
+						await request('guest_key_license_share', {users: JSON.stringify(users)});
+						message = s.sharingSaved;
+					}
+					feedback.textContent = message;
+				} finally { syncChoices(); }
+			};
+			function scheduleSave() {
+				clearTimeout(saveTimer);
+				saveTimer = setTimeout(() => {
+					if (busy) { scheduleSave(); return; }
+					run(async () => {});
+				}, 500);
 			}
 			licensing.administrators.forEach(admin => {
 				const row = document.createElement('div'); row.className = 'guest-key-admin-row';
@@ -204,10 +227,13 @@
 				}
 				const share = choice(s.shareAccess, 'data-guest-key-share');
 				const hide = choice(s.hideToolbar, 'data-guest-key-hide');
-				share.addEventListener('change', () => saveChoices('guest_key_license_share', {
-					users: JSON.stringify(choices.filter(item => item.share.checked).map(item => item.id))
-				}, s.sharingSaved));
-				hide.addEventListener('change', () => saveChoices('guest_key_license_visibility', {user: String(admin.id), hidden: hide.checked ? '1' : '0'}, s.visibilitySaved));
+				share.addEventListener('change', scheduleSave);
+				hide.addEventListener('change', () => {
+					if (licensing.kind !== 'paid' || hide.checked) share.setAttribute('data-guest-key-disabled', '');
+					else share.removeAttribute('data-guest-key-disabled');
+					share.disabled = share.hasAttribute('data-guest-key-disabled');
+					scheduleSave();
+				});
 				choices.push({share, hide, id: admin.id}); sharing.append(row);
 			});
 			syncChoices(); licensePanel.append(sharing);
@@ -394,17 +420,12 @@
 		const field = document.getElementById('guest-key-diagnostic-report');
 		button.disabled = true;
 		try {
-			field.value = JSON.stringify(await request('guest_key_diagnostics'), null, 2);
-			try {
-				await navigator.clipboard.writeText(field.value);
-				status(s.diagnosticsCopied);
-			} catch {
-				field.focus();
-				field.select();
-				status(s.diagnosticsSelect);
-			}
-		} catch (error) {
-			status(error.message || s.error, true);
+			await navigator.clipboard.writeText(field.value);
+			status(s.diagnosticsCopied);
+		} catch {
+			field.focus();
+			field.select();
+			status(s.diagnosticsSelect);
 		} finally {
 			button.disabled = false;
 		}

@@ -4,6 +4,8 @@ defined( 'ABSPATH' ) || exit;
 final class Guest_Key_Dependency {
 
 	const PLUGIN = 'mcp-adapter/mcp-adapter.php';
+	// WordPress.org's canonical ZIP tracks the current release without a plugin-info lookup.
+	const PACKAGE_URL = 'https://downloads.wordpress.org/plugin/mcp-adapter.zip';
 	private static $changing = false;
 
 	public static function init() {
@@ -82,18 +84,10 @@ final class Guest_Key_Dependency {
 				return new WP_Error( 'guest_key_install_denied', __( 'This site does not allow automatic plugin installation. Install the official MCP Adapter, then retry.', 'guest-key' ) );
 			}
 			require_once ABSPATH . 'wp-admin/includes/file.php';
-			require_once ABSPATH . 'wp-admin/includes/plugin-install.php';
 			require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
-			$info = plugins_api( 'plugin_information', array( 'slug' => 'mcp-adapter', 'fields' => array( 'sections' => false ) ) );
-			if ( is_wp_error( $info ) ) {
-				return new WP_Error( 'guest_key_download', __( 'Could not retrieve MCP Adapter from WordPress.org. ', 'guest-key' ) . $info->get_error_message() );
-			}
-			if ( 'mcp-adapter' !== ( $info->slug ?? '' ) || ! preg_match( '#^https://downloads\.wordpress\.org/plugin/mcp-adapter\.[a-zA-Z0-9.-]+\.zip$#', $info->download_link ?? '' ) ) {
-				return new WP_Error( 'guest_key_package', __( 'WordPress.org did not return an official MCP Adapter package.', 'guest-key' ) );
-			}
 			$skin = new WP_Ajax_Upgrader_Skin();
 			$installer = new Plugin_Upgrader( $skin );
-			$result = $installer->install( $info->download_link );
+			$result = $installer->install( self::PACKAGE_URL );
 			if ( is_wp_error( $result ) ) {
 				return $result;
 			}

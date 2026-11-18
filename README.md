@@ -36,4 +36,6 @@ Access follows the issuing administrator’s permissions. No direct file writes,
 
 Requires WordPress 6.9+, PHP 7.4+, HTTPS, and administrator application passwords. New verified trials last three days.
 
+Guest Key installs the optional official MCP Adapter plugin from WordPress.org’s canonical [release ZIP](https://downloads.wordpress.org/plugin/mcp-adapter.zip) using the native WordPress installer. If automatic installation is blocked, install and activate MCP Adapter from Plugins → Add New, then retry. Native REST commands and temporary browser sign-in remain available without MCP.
+
 [Download ZIP](https://github.com/jonschr/guest-key/releases/latest/download/guest-key.zip)

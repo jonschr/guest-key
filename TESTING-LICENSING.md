@@ -1,3 +1,15 @@
+# 0.2.10 release validation — 2026-11-17
+
+On the Cove main development site, shared-browser verification confirmed real clipboard contents exactly match the displayed diagnostics, with zero diagnostic AJAX requests. Browser tests using the actual admin script and an in-memory paid-license/AJAX fixture confirmed 500 ms debouncing, one sharing request for rapid multi-user selections, zero requests for reversed visibility toggles, preserved focus, hidden-user sharing restrictions and failed-save restoration. The fixture did not persist licenses or administrator changes, and the test tab was closed.
+
+All 23 JavaScript checks, 22 native settings-page checks and 13 native diagnostics checks passed. Earlier in this task, eight isolated installer checks and a real native installation of the official MCP Adapter 0.7.1 ZIP passed. Existing grants and saved diagnostics were preserved/restored by the native suites. No customer site was updated; older WordPress versions and Safari were not tested.
+
+# MCP Adapter installation — development, 2026-11-17
+
+Verified the official WordPress.org listing and live plugin API report MCP Adapter 0.7.1, requiring WordPress 6.9 and PHP 7.4. The existing metadata lookup returned a valid versioned URL locally, so the exact response behind reported customer-site failures was not reproduced. Guest Key now supplies WordPress.org’s canonical `https://downloads.wordpress.org/plugin/mcp-adapter.zip` directly to the native installer, removing the metadata lookup and versioned-filename-only rejection. Existing installed-version checks and activation/ownership behavior remain unchanged.
+
+Eight isolated installer checks passed, covering filesystem credentials, the fixed official download source, independence from plugin-info metadata, download failure details and package-operation error handling. A real download and native installation into a temporary plugin directory on WordPress 7.1.4 succeeded; its headers identified MCP Adapter 0.7.1 / WordPress 6.9 / PHP 7.4. The downloaded adapter was not activated. Temporary package files were removed. PHP syntax and diff whitespace checks passed. No customer site was changed, and no older WordPress installation or interactive browser flow was tested.
+
 # 0.2.9 release validation — 2026-11-11
 
 Copied instructions now place an agent-neutral User-Agent with a real client/service information URL before command discovery. Browser user agents stay unchanged, tools without custom headers retain their fallback, and the bundle contains no hosting-specific troubleshooting workflow.
