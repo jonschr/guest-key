@@ -28,6 +28,8 @@ Work that requires writing code files should generally happen locally with a web
 
 ## Choose who can use it
 
+On a new installation, the first successful paid-license activation hides Guest Key from the other administrators and identifies the activating owner as their contact. Existing installations keep their current visibility settings, and later activations do not reset an owner’s choices. Administrators with their own purchased licenses always retain access.
+
 Licenses and verified trials belong to the administrator who activates them. License owners can enable shared access for other administrators on the same site. When several owners manage access, the last saved selection applies; each owner keeps control of their own license and always retains Guest Key access.
 
 Hidden administrators see a contact, purchase, and license-entry page. Activating their own purchased license gives them full controls alongside the other owners. An administrator needs their own entitlement or shared access before Guest Key will issue a credential.
@@ -56,7 +58,7 @@ Requires WordPress 6.9+, PHP 7.4+, HTTPS, and administrator application password
 
 Install and activate Guest Key, open its settings, and verify your email for a trial or enter your license key. Then click **Copy Guest Key** and paste it into your AI agent.
 
-Guest Key installs the optional official MCP Adapter through WordPress’s native installer. If automatic installation is blocked, install and activate MCP Adapter from Plugins → Add New, then retry. Native REST commands and temporary browser sign-in remain available without MCP.
+Guest Key installs the optional official MCP Adapter through WordPress’s native installer. If automatic installation is blocked, install and activate MCP Adapter from Plugins → Add New, then retry. Native REST commands and temporary browser sign-in remain available without MCP. After an update, an outstanding MCP setup failure is retried once on the next normal administrator visit. The warning also offers **Retry MCP setup** without creating a new Guest Key.
 
 <details>
 <summary>Developer reference and access boundaries</summary>

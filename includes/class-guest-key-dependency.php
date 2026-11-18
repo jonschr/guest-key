@@ -9,6 +9,8 @@ final class Guest_Key_Dependency {
 	private static $changing = false;
 
 	public static function init() {
+		add_action( 'admin_init', array( __CLASS__, 'maybe_retry' ) );
+		add_action( 'admin_post_guest_key_retry_mcp', array( __CLASS__, 'handle_retry' ) );
 		add_action( 'activated_plugin', array( __CLASS__, 'external_activation' ), 10, 2 );
 		add_action( 'deactivated_plugin', array( __CLASS__, 'external_activation' ), 10, 2 );
 		add_filter( 'mcp_adapter_create_default_server', array( __CLASS__, 'default_server' ) );
@@ -46,6 +48,38 @@ final class Guest_Key_Dependency {
 		if ( is_wp_error( $result ) ) {
 			self::record_error( $result );
 		}
+	}
+
+	public static function can_retry() {
+		return Guest_Key_Access::administrator() && ! Guest_Key_Browser::is_guest_session()
+			&& ! Guest_Key_Access::is_guest_request( get_current_user_id() ) && ! rest_get_authenticated_app_password()
+			&& wp_get_session_token() && ! Guest_Key_License::toolbar_hidden( get_current_user_id() )
+			&& current_user_can( 'activate_plugins' ) && ( ! self::network() || current_user_can( 'manage_network_plugins' ) );
+	}
+
+	public static function retry( $force = false ) {
+		if ( ! self::can_retry() ) { return new WP_Error( 'guest_key_setup_denied', __( 'Use a normal administrator browser session to retry MCP setup.', 'guest-key' ) ); }
+		return Guest_Key_Access::locked( 0, static function () use ( $force ) {
+			if ( ! $force && ( ! get_option( 'guest_key_dependency_error' ) || GUEST_KEY_VERSION === get_option( 'guest_key_dependency_retry_version' ) ) ) { return true; }
+			// Retry old failures once with the new implementation, without polling on every page.
+			update_option( 'guest_key_dependency_retry_version', GUEST_KEY_VERSION, false );
+			$result = self::ensure();
+			if ( is_wp_error( $result ) ) { self::record_error( $result ); }
+			return $result;
+		} );
+	}
+
+	public static function maybe_retry() {
+		if ( wp_doing_ajax() || 'GET' !== ( $_SERVER['REQUEST_METHOD'] ?? 'GET' ) || ! self::can_retry() ) { return; }
+		self::retry();
+	}
+
+	public static function handle_retry() {
+		if ( ! self::can_retry() ) { wp_die( esc_html__( 'Use a normal administrator browser session to retry MCP setup.', 'guest-key' ), '', array( 'response' => 403 ) ); }
+		check_admin_referer( 'guest_key_retry_mcp' );
+		self::retry( true );
+		wp_safe_redirect( Guest_Key_Admin::page_url() . '#guest-key-diagnostics' );
+		exit;
 	}
 
 	public static function diagnostic_message( $message ) {

@@ -1,5 +1,12 @@
 # Changes
 
+## 0.2.13 — 2026-11-17
+
+- Retry outstanding MCP setup errors once after a plugin update on the next normal administrator visit. Add a nonce-protected Retry MCP setup action without issuing another credential.
+- Clear the active setup warning on success, retain historical diagnostics, and replace stale errors with the latest failure when a retry fails.
+- On new installations, hide Guest Key from other non-owner administrators after the first successful paid-license activation. Record the activating owner as their contact.
+- Preserve existing installations, reactivation state, purchased-license owners and later visibility choices.
+
 ## 0.2.12 — 2026-11-17
 
 - Block plugin, theme and WordPress core changes through temporary Guest Key credentials and browser sessions. Preserve normal administrator maintenance, read-only inventory and media uploads.

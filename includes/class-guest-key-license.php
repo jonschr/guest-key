@@ -7,6 +7,7 @@ final class Guest_Key_License {
 	const PENDING = 'guest_key_trial_pending';
 	const SHARING = 'guest_key_shared_users';
 	const CONTACTS = 'guest_key_license_contacts';
+	const DEFAULTS = 'guest_key_access_defaults';
 	const HIDDEN = 'guest_key_hidden_toolbar_users';
 	const CHECKOUT = 'https://elodin.lemonsqueezy.com/checkout/buy/40b6382a-e891-418c-bf00-69512a7243dd';
 	const RENEW = 'https://app.lemonsqueezy.com/my-orders';
@@ -15,6 +16,7 @@ final class Guest_Key_License {
 		foreach ( array( 'status', 'email', 'verify', 'activate', 'remove', 'share', 'visibility', 'claim_existing' ) as $action ) {
 			add_action( 'wp_ajax_guest_key_license_' . $action, static function () use ( $action ) { self::ajax( $action ); } );
 		}
+		add_action( 'init', array( __CLASS__, 'preserve_existing_access' ) );
 		add_action( 'rest_api_init', array( __CLASS__, 'routes' ) );
 		add_action( 'admin_init', array( __CLASS__, 'migrate_legacy' ) );
 		add_action( 'guest_key_license_refresh', static function () {
@@ -29,6 +31,37 @@ final class Guest_Key_License {
 		} );
 	}
 
+
+	private static function has_installation_state() {
+		global $wpdb;
+		return (bool) $wpdb->get_var( $wpdb->prepare( "SELECT option_id FROM {$wpdb->options} WHERE option_name LIKE %s LIMIT 1", $wpdb->esc_like( 'guest_key_' ) . '%' ) );
+	}
+
+	public static function record_installation( $network_wide = false ) {
+		if ( null !== get_option( self::DEFAULTS, null ) ) { return; }
+		$mode = self::has_installation_state() ? 'existing' : 'pending';
+		add_option( self::DEFAULTS, $mode, '', false );
+		if ( $network_wide ) { add_site_option( self::DEFAULTS, $mode ); }
+	}
+
+	public static function preserve_existing_access() {
+		if ( null !== get_option( self::DEFAULTS, null ) ) { return; }
+		// Updates do not run activation hooks. Treat already-active installations as existing.
+		$fresh_network = Guest_Key_Dependency::network() && 'pending' === get_site_option( self::DEFAULTS ) && ! self::has_installation_state();
+		add_option( self::DEFAULTS, $fresh_network ? 'pending' : 'existing', '', false );
+	}
+
+	private static function initialize_access( $owner_id ) {
+		if ( 'pending' !== get_option( self::DEFAULTS ) ) { return; }
+		$hidden = (array) get_option( self::HIDDEN, array() );
+		$users = array();
+		foreach ( get_users( array( 'role' => 'administrator', 'blog_id' => get_current_blog_id() ) ) as $admin ) {
+			if ( (int) $admin->ID !== $owner_id && ! self::owns_paid( $admin->ID ) ) { $users[] = (int) $admin->ID; }
+		}
+		update_option( self::HIDDEN, array_values( array_unique( array_merge( $hidden, $users ) ) ), false );
+		self::remember_contact( $users, $owner_id );
+		update_option( self::DEFAULTS, 'done', false );
+	}
 
 	/** Serialize license changes across owners; nested purchase upgrades reuse the same lock. */
 	private static function serialized( $callback ) {
@@ -97,9 +130,9 @@ final class Guest_Key_License {
 		return array_values( array_unique( $users ) );
 	}
 
-	private static function remember_contact( $users ) {
+	private static function remember_contact( $users, $owner_id = null ) {
 		$contacts = (array) get_option( self::CONTACTS, array() );
-		foreach ( $users as $id ) { $contacts[ $id ] = get_current_user_id(); }
+		foreach ( $users as $id ) { $contacts[ $id ] = null === $owner_id ? get_current_user_id() : (int) $owner_id; }
 		update_option( self::CONTACTS, $contacts, false );
 	}
 
@@ -472,6 +505,7 @@ final class Guest_Key_License {
 		$expires = self::expiration( $data['license_key'] ?? null );
 		if ( false === $expires || ( $expires && $expires <= time() ) ) { return new WP_Error( 'guest_key_license_invalid', __( 'Could not confirm an active license expiration.', 'guest-key' ) ); }
 		self::save( array( 'kind' => 'paid', 'key' => $key, 'instance' => $data['instance']['id'], 'site' => self::site(), 'status' => 'active', 'expires' => $expires, 'checked' => time(), 'shared_users' => array(), 'email' => $data['meta']['user_email'] ?? '' ), $owner_id );
+		self::initialize_access( null === $owner_id ? get_current_user_id() : (int) $owner_id );
 		delete_option( self::pending_name( $owner_id ) );
 		return true;
 	}

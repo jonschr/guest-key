@@ -8,7 +8,7 @@ $original_user = get_current_user_id();
 $legacy = get_option( Guest_Key_License::OPTION, null );
 $legacy_pending = get_option( Guest_Key_License::PENDING, null );
 $dependency_error = get_option( 'guest_key_dependency_error', null );
-$site_options = array(); foreach (array(Guest_Key_License::SHARING, Guest_Key_License::CONTACTS) as $name) { $site_options[$name]=get_option($name,null); delete_option($name); }
+$site_options = array(); foreach (array(Guest_Key_License::SHARING, Guest_Key_License::CONTACTS, Guest_Key_License::HIDDEN, Guest_Key_License::DEFAULTS) as $name) { $site_options[$name]=get_option($name,null); delete_option($name); }
 $users = array(); $checks = 0; $calls = array(); $migration_email = ''; $purchases = array();
 $assert = static function ( $ok, $message ) use ( &$checks ) { if ( ! $ok ) { throw new RuntimeException( $message ); } $checks++; echo "PASS: {$message}\n"; };
 $mock = static function ( $pre, $args, $url ) use ( &$calls, &$migration_email, &$purchases ) {
@@ -18,7 +18,7 @@ $mock = static function ( $pre, $args, $url ) use ( &$calls, &$migration_email, 
 	elseif ( false !== strpos( $url, '/trials/status' ) ) { $data = array( 'status' => 'expired', 'expires_at' => gmdate( 'c', time() - 1 ) ); }
 	else {
 		$key = $args['body']['license_key'] ?? 'fixture';
-		$data = array( 'valid' => true, 'activated' => true, 'deactivated' => true, 'license_key' => array( 'expires_at' => null, 'activation_limit' => 0 ),
+		$data = array( 'valid' => 'fixture-invalid-first' !== $key, 'activated' => 'fixture-invalid-first' !== $key, 'deactivated' => true, 'license_key' => array( 'expires_at' => null, 'activation_limit' => 0 ),
 			'instance' => array( 'id' => 'fixture-' . substr( hash( 'sha256', $key ), 0, 8 ) ),
 			'meta' => array( 'product_id' => 1457777, 'variant_id' => 2274401, 'user_email' => $migration_email ) );
 	}
@@ -31,6 +31,32 @@ try {
 		if ( is_wp_error( $id ) ) { throw new RuntimeException( 'Account setup failed.' ); } $users[ $label ] = $id;
 	}
 	list( $a, $b, $c, $d ) = array_values( $users );
+	Guest_Key_License::preserve_existing_access();
+	$assert( 'existing' === get_option( Guest_Key_License::DEFAULTS ) && ! get_option( Guest_Key_License::HIDDEN ), 'An already-active installation is marked existing without changing visibility' );
+	Guest_Key_License::record_installation();
+	$assert( 'existing' === get_option( Guest_Key_License::DEFAULTS ), 'Reactivation does not replace existing-site classification' );
+	delete_option( Guest_Key_License::DEFAULTS );
+	Guest_Key_License::record_installation();
+	$assert( 'existing' === get_option( Guest_Key_License::DEFAULTS ), 'Existing Guest Key data prevents fresh defaults during reactivation' );
+	delete_option( Guest_Key_License::DEFAULTS );
+	// Emulate the read-only installation-state query on a pristine site without deleting site data.
+	$pristine = static function ( $sql ) { global $wpdb; return 0 === strpos( $sql, 'SELECT option_id FROM ' . $wpdb->options . ' WHERE option_name LIKE ' ) ? 'SELECT NULL' : $sql; };
+	add_filter( 'query', $pristine );
+	try { Guest_Key_License::record_installation(); } finally { remove_filter( 'query', $pristine ); }
+	$assert( 'pending' === get_option( Guest_Key_License::DEFAULTS ), 'Fresh activation arms defaults for the first successful license key' );
+	$only_fixtures = static function ( $query ) use ( $users ) { if ( 'administrator' === ( $query->query_vars['role'] ?? '' ) ) { $query->set( 'include', array_values( $users ) ); } };
+	add_action( 'pre_get_users', $only_fixtures );
+	wp_set_current_user( $a );
+	$assert( is_wp_error( Guest_Key_License::activate( 'fixture-invalid-first' ) ) && 'pending' === get_option( Guest_Key_License::DEFAULTS ) && ! get_option( Guest_Key_License::HIDDEN ), 'A failed initial license key does not hide administrators or consume initialization' );
+	$assert( true === Guest_Key_License::activate( 'fixture-owner-a' ), 'First paid activation on a new installation initializes visibility' );
+	remove_action( 'pre_get_users', $only_fixtures );
+	$assert( ! Guest_Key_License::toolbar_hidden( $a ) && Guest_Key_License::toolbar_hidden( $b ) && Guest_Key_License::toolbar_hidden( $c ) && Guest_Key_License::toolbar_hidden( $d ), 'Only the first licensed administrator starts with access on a new site' );
+	wp_set_current_user( $c );
+	$assert( Guest_Key_License::view()['restricted'] && Guest_Key_License::contact_email( $c ) === get_userdata( $a )->user_email, 'Initially hidden administrators see the owning administrator as their contact' );
+	wp_set_current_user( $a ); Guest_Key_License::set_toolbar_hidden( $c, false ); Guest_Key_License::activate( 'fixture-owner-a' );
+	$assert( 'done' === get_option( Guest_Key_License::DEFAULTS ) && ! Guest_Key_License::toolbar_hidden( $c ), 'Repeated activation preserves the owner’s later visibility choices' );
+	delete_option( Guest_Key_License::HIDDEN ); delete_option( Guest_Key_License::CONTACTS );
+	update_option( Guest_Key_License::DEFAULTS, 'existing', false );
 	wp_set_current_user( $a );
 	$assert( true === Guest_Key_License::activate( 'fixture-owner-a' ), 'First administrator activates their own license' );
 	$assert( Guest_Key_License::active_until( $a ) && ! Guest_Key_License::active_until( $b ), 'Activation defaults to its owner, not every administrator' );
@@ -39,8 +65,12 @@ try {
 	$refreshed = Guest_Key_Access::create( $a );
 	$assert( ! is_wp_error( $refreshed ) && count( $calls ) === $n + 1 && Guest_Key_License::active_until( $a ), 'Copying access refreshes a stale license without reacquiring the credential lock' );
 	Guest_Key_Access::revoke( $a );
+	$existing_contacts = get_option( Guest_Key_License::CONTACTS, null );
+	update_option( Guest_Key_License::HIDDEN, array( $c ), false );
 	wp_set_current_user( $b );
 	$assert( true === Guest_Key_License::activate( 'fixture-owner-b' ) && Guest_Key_License::active_until( $a ) && Guest_Key_License::active_until( $b ), 'Two separate licenses coexist on one site' );
+	$assert( array( $c ) === get_option( Guest_Key_License::HIDDEN ) && $existing_contacts === get_option( Guest_Key_License::CONTACTS, null ), 'Entering another key on an existing installation preserves visibility and contacts' );
+	delete_option( Guest_Key_License::HIDDEN );
 	foreach ( array( $a => $c, $b => $d ) as $owner_id => $recipient ) {
 		$legacy_share = get_option( Guest_Key_License::option_name( $owner_id ) ); $legacy_share['shared_users'] = array( $recipient );
 		update_option( Guest_Key_License::option_name( $owner_id ), $legacy_share, false );
@@ -117,6 +147,7 @@ try {
 	wp_set_current_user( $original_user );
 } finally {
 	wp_set_current_user( $original_user );
+	if ( isset( $only_fixtures ) ) { remove_action( 'pre_get_users', $only_fixtures ); }
 	foreach ( $site_options as $name => $value ) { if ( null === $value ) { delete_option( $name ); } else { update_option( $name, $value, false ); } }
 	foreach ( $users as $id ) { Guest_Key_Access::revoke( $id ); delete_option( Guest_Key_License::option_name( $id ) ); delete_option( Guest_Key_License::pending_name( $id ) ); wp_delete_user( $id ); }
 	foreach ( array( Guest_Key_License::OPTION => $legacy, Guest_Key_License::PENDING => $legacy_pending ) as $name => $value ) { if ( null === $value ) { delete_option( $name ); } else { update_option( $name, $value, false ); } }

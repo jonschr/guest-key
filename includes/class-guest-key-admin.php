@@ -158,12 +158,13 @@ final class Guest_Key_Admin {
 	}
 
 	public static function dependency_notice() {
-		if ( ! Guest_Key_Access::administrator() ) {
-			return;
-		}
+		if ( ! Guest_Key_Dependency::can_retry() ) { return; }
 		$message = get_option( 'guest_key_dependency_error' );
 		if ( $message ) {
-			echo '<div class="notice notice-warning"><p><strong>Guest Key:</strong> ' . esc_html__( 'MCP setup is unavailable. REST commands and browser access can still be created.', 'guest-key' ) . ' ' . esc_html( $message ) . ' <a href="' . esc_url( self::page_url() ) . '">' . esc_html__( 'Open Guest Key to retry', 'guest-key' ) . '</a></p></div>';
+			echo '<div class="notice notice-warning"><p><strong>Guest Key:</strong> ' . esc_html__( 'MCP setup is unavailable. REST commands and browser access can still be created.', 'guest-key' ) . ' ' . esc_html( $message ) . '</p>';
+			echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><input type="hidden" name="action" value="guest_key_retry_mcp">';
+			wp_nonce_field( 'guest_key_retry_mcp' );
+			echo '<p><button type="submit" class="button">' . esc_html__( 'Retry MCP setup', 'guest-key' ) . '</button></p></form></div>';
 		}
 	}
 

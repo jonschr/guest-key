@@ -1,3 +1,21 @@
+# 0.2.13 release validation — 2026-11-17
+
+The final source passed 222 checks: diagnostics/recovery 21, administrator licensing/sharing 41, visibility 36, licensing 29, activation redirects 14, automatic purchase matching 20, settings 22, isolated installer failure handling 11 and JavaScript 28. These cover stale-error recovery without credential rotation, once-per-version retry, explicit setup retry, replacement of outdated failures, fresh-install visibility defaults, failed-key behavior and preservation of existing installation settings. Provider responses and the pristine-install state query were simulated; visibility fixtures were limited to disposable administrators. Original site options, sessions and grants were preserved or restored.
+
+All 135 PHP files passed syntax checks; JavaScript syntax and whitespace checks passed. Packaged installation/upgrade and public-download checks are recorded in the release notes. No new interactive browser, multisite, Safari, older-WordPress or customer-site verification was performed.
+
+# New-install administrator visibility defaults — development, 2026-11-17
+
+Fresh activation records a pending one-time default before dependency setup creates installation state. The first successful paid-license activation hides other site administrators who do not own a purchased license and records the activating owner as their contact. An invalid key leaves visibility unchanged. Repeated activation and later owner choices do not reapply the defaults. Normal initialization marks already-active installations as existing, and prior Guest Key state prevents reactivation from being treated as fresh. Fresh network activation carries the pending default to sites without prior local state; existing local configurations are preserved.
+
+Single-site checks passed: administrator licensing/sharing 41, visibility 36, licensing 29, activation redirects 14 and automatic licensing 20 (140 total). The pristine-state query and provider responses were simulated, with visibility queries limited to disposable fixture administrators. Original site options and grants were restored. PHP syntax and whitespace checks passed. No new multisite or interactive browser verification, customer-site changes or release were performed.
+
+# MCP setup retry after updates — development, 2026-11-17
+
+An outstanding setup error now retries once per plugin version on the next normal administrator GET request. It does not retry during AJAX, form submissions, hidden-user visits or temporary access. The version marker is checked and written inside the setup lock. The warning has an explicit nonce-protected POST retry action, available only to a normal administrator browser session. Success clears the current error while preserving historical diagnostic evidence; failure records the current setup error instead of continuing to display an obsolete package lookup message. Neither path issues or rotates credentials.
+
+Passed 21 diagnostics/recovery and 11 isolated installer checks, including successful recovery, once-per-version behavior, explicit retry, fresh failure replacement and temporary-access denial. Installer failure checks made no HTTP requests and installed no plugin. Original options, sessions and grants were restored. Changed PHP syntax and whitespace checks passed. No browser verification, customer-site change or release was performed.
+
 # 0.2.12 release validation — 2026-11-17
 
 The final release source passed 415 checks: filesystem 87, commands 59, duration 39, browser-session HTTP 43, diagnostics 14, roles 44, authentication 42, operations policy 59 and JavaScript 28. This includes native REST code-install/delete denial, command-level self-deactivation denial, duration/metadata protections, real media upload, read-only inventory, canonical source exclusion and public-guide access. Temporary fixture users/content/credentials were removed; saved options, grants and adapter state were preserved or restored. The final cursor HTTP check passed without a retry.

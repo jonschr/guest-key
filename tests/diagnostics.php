@@ -3,8 +3,10 @@
 if ( ! defined( 'WP_CLI' ) || ! WP_CLI || ! in_array( wp_get_environment_type(), array( 'local', 'development' ), true ) || ! Guest_Key_Access::administrator() ) { throw new RuntimeException( 'Use WP-CLI as an administrator on a local/development site.' ); }
 error_reporting( E_ALL & ~E_DEPRECATED );
 $owner = get_current_user_id(); $checks = 0; $requests = 0;
-$options = array( 'guest_key_dependency_error', 'guest_key_dependency_last_error' );
+$options = array( 'guest_key_dependency_error', 'guest_key_dependency_last_error', 'guest_key_dependency_retry_version' );
 $saved = array_map( static function ( $key ) { return get_option( $key, null ); }, $options );
+$cookies = $_COOKIE; $session_token = WP_Session_Tokens::get_instance( $owner )->create( time() + HOUR_IN_SECONDS );
+$_COOKIE[ LOGGED_IN_COOKIE ] = wp_generate_auth_cookie( $owner, time() + HOUR_IN_SECONDS, 'logged_in', $session_token );
 $grants = Guest_Key_Access::grants();
 $assert = static function ( $ok, $message ) use ( &$checks ) { if ( ! $ok ) { throw new RuntimeException( $message ); } $checks++; echo 'PASS: ' . $message . "\n"; };
 $block_http = static function () use ( &$requests ) { $requests++; return new WP_Error( 'diagnostic_no_network', 'Reports must not make HTTP requests.' ); };
@@ -26,14 +28,34 @@ try {
 	$last = $report['last_mcp_failure'];
 	add_filter( 'option_active_plugins', $active );
 	$assert( true === Guest_Key_Dependency::ensure( false ), 'An installed compatible adapter recovers successfully' );
+	Guest_Key_Dependency::record_error( new WP_Error( 'guest_key_package', 'Old package lookup failure.' ) );
+	$old_failure = get_option( 'guest_key_dependency_last_error' );
+	update_option( 'guest_key_dependency_retry_version', 'old-version', false );
+	Guest_Key_Dependency::maybe_retry();
+	$assert( ! get_option( 'guest_key_dependency_error' ) && GUEST_KEY_VERSION === get_option( 'guest_key_dependency_retry_version' ), 'An administrator visit retries an outstanding error after an update' );
+	$assert( $old_failure === get_option( 'guest_key_dependency_last_error' ) && $grants === Guest_Key_Access::grants(), 'Automatic recovery retains historical evidence without issuing a key' );
+	Guest_Key_Dependency::record_error( new WP_Error( 'fixture_current', 'Fixture current failure.' ) );
+	Guest_Key_Dependency::maybe_retry();
+	$assert( 'Fixture current failure.' === get_option( 'guest_key_dependency_error' ), 'Background recovery retries at most once per version' );
+	ob_start(); Guest_Key_Admin::dependency_notice(); $notice = ob_get_clean();
+	$assert( false !== strpos( $notice, 'Retry MCP setup' ) && false !== strpos( $notice, 'method="post"' ) && false !== strpos( $notice, '_wpnonce' ), 'The warning offers an explicit nonce-protected setup retry' );
+	unset( $_COOKIE[ LOGGED_IN_COOKIE ] );
+	$assert( is_wp_error( Guest_Key_Dependency::retry( true ) ), 'A command-line identity without a browser session cannot retry setup' );
+	$_COOKIE[ LOGGED_IN_COOKIE ] = wp_generate_auth_cookie( $owner, time() + HOUR_IN_SECONDS, 'logged_in', $session_token );
+	$reflection = new ReflectionProperty( Guest_Key_Access::class, 'authenticated_user_id' ); $reflection->setAccessible( true );
+	$authenticated = $reflection->getValue(); $reflection->setValue( null, $owner );
+	try { $assert( is_wp_error( Guest_Key_Dependency::retry( true ) ), 'Temporary API access cannot invoke automatic or manual setup retry' ); }
+	finally { $reflection->setValue( null, $authenticated ); }
+	$assert( true === Guest_Key_Dependency::retry( true ) && ! get_option( 'guest_key_dependency_error' ), 'Explicit retry works after the background attempt without rotating credentials' );
 	remove_filter( 'option_active_plugins', $active );
 	$report = Guest_Key_Admin::diagnostics();
-	$assert( '' === $report['current_mcp_error'] && $last === $report['last_mcp_failure'], 'Recovery clears the active warning and retains the last failure' );
+	$assert( '' === $report['current_mcp_error'] && 'fixture_current' === $report['last_mcp_failure']['code'], 'Recovery clears the active warning and retains the last failure' );
 	$assert( 0 === $requests && $grants === Guest_Key_Access::grants(), 'Reports make no HTTP requests and preserve credentials' );
 	wp_set_current_user( 0 );
 	$assert( is_wp_error( Guest_Key_Admin::diagnostics() ), 'Unauthenticated users cannot obtain diagnostic reports' );
 } finally {
 	wp_set_current_user( $owner );
+	$_COOKIE = $cookies; WP_Session_Tokens::get_instance( $owner )->destroy( $session_token );
 	remove_filter( 'option_active_plugins', $active );
 	remove_filter( 'pre_http_request', $block_http );
 	foreach ( $options as $i => $key ) {
