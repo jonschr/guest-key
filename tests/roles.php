@@ -1,7 +1,7 @@
 <?php
 /** wp --user=admin eval-file tests/roles.php; local single-site regression with a temporary account/role. */
 if ( ! defined( 'WP_CLI' ) || ! WP_CLI || is_multisite() || ! in_array( wp_get_environment_type(), array( 'local', 'development' ), true ) || ! Guest_Key_Access::administrator() ) { throw new RuntimeException( 'Use WP-CLI as an administrator on a local/development single site.' ); }
-require_once __DIR__ . '/user-license-fixture.php';
+require_once __DIR__ . '/user-access-fixture.php';
 error_reporting( E_ALL & ~E_DEPRECATED );
 require_once ABSPATH . 'wp-admin/includes/user.php';
 require_once ABSPATH . 'wp-admin/includes/plugin.php';
@@ -25,7 +25,7 @@ try {
 		get_userdata( $uid )->set_role( $name ); wp_set_current_user( 0 ); wp_set_current_user( $uid );
 		if ( $role === $name ) { $assert( current_user_can( 'manage_options' ), 'The custom role has admin-like capabilities without the administrator role' ); }
 		$assert( ! Guest_Key_Access::administrator(), 'The ' . $name . ' role is ineligible for Guest Key' );
-		$result = guest_key_test_entitled_create( $uid );
+		$result = guest_key_test_enabled_create( $uid );
 		$assert( is_wp_error( $result ) && 'guest_key_forbidden' === $result->get_error_code() && ! Guest_Key_Access::grant( $uid ) && ! WP_Application_Passwords::get_user_application_passwords( $uid ), 'The ' . $name . ' role cannot create credentials or access records' );
 		$bar = new WP_Admin_Bar(); Guest_Key_Admin::toolbar( $bar ); Guest_Key_Admin::assets();
 		$assert( ! $bar->get_node( 'guest-key-access' ) && ! wp_script_is( 'guest-key', 'enqueued' ) && ! wp_style_is( 'guest-key', 'enqueued' ), 'The ' . $name . ' role gets no Guest Key toolbar, scripts or styles' );
@@ -44,7 +44,7 @@ try {
 		new WP_Http_Cookie( array( 'name' => LOGGED_IN_COOKIE, 'value' => $login_cookie, 'path' => '/' ) ),
 		new WP_Http_Cookie( array( 'name' => SECURE_AUTH_COOKIE, 'value' => wp_generate_auth_cookie( $uid, time() + HOUR_IN_SECONDS, 'secure_auth', $token ), 'path' => '/' ) ),
 	);
-	foreach ( array( 'guest_key_create', 'guest_key_revoke', 'guest_key_diagnostics', 'guest_key_license_status', 'guest_key_license_email', 'guest_key_license_verify', 'guest_key_license_activate', 'guest_key_license_remove', 'guest_key_license_share', 'guest_key_license_visibility', 'guest_key_license_claim_existing' ) as $action ) {
+	foreach ( array( 'guest_key_create', 'guest_key_revoke', 'guest_key_diagnostics', 'guest_key_set_access', 'guest_key_claim_control', 'guest_key_change_owner' ) as $action ) {
 		$requests++;
 		$response = wp_remote_post( admin_url( 'admin-ajax.php' ), array( 'body' => array( 'action' => $action, 'nonce' => wp_create_nonce( 'guest_key_access' ) ), 'cookies' => $http_cookies, 'sslverify' => false, 'redirection' => 0, 'timeout' => 15, 'user-agent' => 'T3Code/0.0.46-nightly.20261005.2689 (user-directed AI agent; agent=Codex; model=gpt-6.1-sol)' ) );
 		if ( is_wp_error( $response ) ) { throw new RuntimeException( $response->get_error_message() ); }
@@ -65,7 +65,7 @@ try {
 	get_userdata( $uid )->set_role( 'administrator' ); wp_set_current_user( 0 ); wp_set_current_user( $uid );
 	$assert( Guest_Key_Access::administrator(), 'The administrator role remains eligible' );
 	add_filter( 'user_has_cap', $deny );
-	try { $assert( ! Guest_Key_Access::administrator() && is_wp_error( guest_key_test_entitled_create( $uid ) ), 'An administrator still needs its native manage_options capability' ); }
+	try { $assert( ! Guest_Key_Access::administrator() && is_wp_error( guest_key_test_enabled_create( $uid ) ), 'An administrator still needs its native manage_options capability' ); }
 	finally { remove_filter( 'user_has_cap', $deny ); }
 	wp_set_current_user( 0 );
 	$assert( ! Guest_Key_Access::administrator() && ! Guest_Key_Access::administrator( PHP_INT_MAX ), 'Anonymous and nonexistent accounts are ineligible' );

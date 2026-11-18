@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/user-license-fixture.php';
+require_once __DIR__ . '/user-access-fixture.php';
 /** wp --user=admin eval-file tests/files.php; temporary directories and credentials are removed. */
 if ( ! defined( 'WP_CLI' ) || ! WP_CLI || is_multisite() || ! in_array( wp_get_environment_type(), array( 'local', 'development' ), true ) || ! Guest_Key_Access::administrator() ) { throw new RuntimeException( 'Use WP-CLI as an administrator on a local/development single site with its web server running.' ); }
 error_reporting( E_ALL & ~E_DEPRECATED );
@@ -45,7 +45,7 @@ try {
 	symlink( $fixture . '/example.php', $fixture . '/inside-file' ); symlink( $fixture . '/.env', $fixture . '/credential-alias' ); symlink( $fixture, $fixture . '/loop' );
 	$hash = hash_file( 'sha256', $fixture . '/example.php' );
 	$plugin_path = ltrim( substr( wp_normalize_path( realpath( GUEST_KEY_DIR ) ), strlen( wp_normalize_path( realpath( WP_CONTENT_DIR ) ) ) ), '/' );
-	foreach ( array( 'guest-key.php', 'includes', 'includes/class-guest-key-license.php', 'assets/guest-key.js', 'vendor', 'tests' ) as $private ) {
+	foreach ( array( 'guest-key.php', 'includes', 'includes/class-guest-key-site-access.php', 'assets/guest-key.js', 'vendor', 'tests' ) as $private ) {
 		$result = $call( 'list-files', array( 'path' => $plugin_path . '/' . $private ) );
 		$assert( is_wp_error( $result ) && 'guest_key_file_denied' === $result->get_error_code(), 'Guest Key implementation path is excluded: ' . $private );
 	}
@@ -55,8 +55,8 @@ try {
 	$guide = $call( 'read-file', array( 'path' => $plugin_path . '/guides/design/wordpress.md' ) );
 	$assert( ! is_wp_error( $guide ) && false !== strpos( $guide['content'], 'Block Runner' ), 'Bundled agent skills and instructions remain readable' );
 	$public = $call( 'search-files', array( 'path' => $plugin_path, 'query' => 'Block Runner' ) );
-	$assert( ! is_wp_error( $public ) && count( $public['matches'] ) > 0 && ! array_filter( $public['matches'], static function ( $row ) use ( $plugin_path ) { return 0 !== strpos( $row['path'], $plugin_path . '/guides/' ); } ), 'Searching the plugin finds guidance without implementation matches' );
-	if ( symlink( GUEST_KEY_DIR . '/includes/class-guest-key-license.php', $fixture . '/private-alias.php' ) ) {
+	$assert( ! is_wp_error( $public ) && count( $public['matches'] ) > 0 && ! array_filter( $public['matches'], static function ( $row ) use ( $plugin_path ) { return $row['path'] !== $plugin_path . '/README.md' && 0 !== strpos( $row['path'], $plugin_path . '/guides/' ) && 0 !== strpos( $row['path'], $plugin_path . '/skills/' ); } ), 'Searching the plugin finds guidance without implementation matches' );
+	if ( symlink( GUEST_KEY_DIR . '/includes/class-guest-key-site-access.php', $fixture . '/private-alias.php' ) ) {
 		$assert( is_wp_error( $call( 'read-file', array( 'path' => $relative . '/private-alias.php' ) ) ), 'Canonical paths prevent symlink aliases from reading Guest Key source' );
 		unlink( $fixture . '/private-alias.php' );
 	}
@@ -169,7 +169,7 @@ try {
 	$r = $call( 'search-files', array( 'path' => $relative . '/depth-limit', 'query' => 'needle' ) );
 	$assert( ! $r['complete'] && 1 === $r['scan']['skipped']['depth'], 'Directory-depth omissions are explicit' );
 	mkdir( $fixture . '/boolean' ); mkdir( $fixture . '/boolean/child' ); touch( $fixture . '/boolean/child/style.css' );
-	$key = guest_key_test_entitled_create( $uid );
+	$key = guest_key_test_enabled_create( $uid );
 	if ( is_wp_error( $key ) ) { throw new RuntimeException( $key->get_error_message() ); }
 	foreach ( array( 'files' => array( 'path' => $relative . '/clean' ), 'files/read' => array( 'path' => $relative . '/example.php', 'offset' => 6, 'length' => 30 ), 'files/search' => array( 'path' => $relative . '/clean', 'query' => 'needle', 'case_sensitive' => 'true', 'limit' => 1 ) ) as $path => $parameters ) {
 		$r = $http( $path, $parameters, $key );
@@ -187,7 +187,7 @@ try {
 	$r = $http( 'files', array( 'path' => $relative . '/boolean', 'depth' => 2, 'search' => '.css', 'limit' => 1 ), $key );
 	$continued = $http( 'files', array( 'path' => $relative . '/boolean', 'depth' => 2, 'search' => '.css', 'limit' => 1, 'cursor' => $r['data']['next_cursor'] ), $key );
 	$assert( 200 === $r['status'] && array( $relative . '/boolean/child/style.css' ) === array_column( $r['data']['items'], 'path' ) && 200 === $continued['status'] && null === $continued['data']['next_cursor'], 'HTTP listing supports depth and resumable cursors' );
-	$r = $http( 'files/read', array( 'path' => $plugin_path . '/includes/class-guest-key-license.php' ), $key );
+	$r = $http( 'files/read', array( 'path' => $plugin_path . '/includes/class-guest-key-site-access.php' ), $key );
 	$assert( 403 === $r['status'], 'Authenticated file HTTP cannot read Guest Key implementation' );
 	$r = $http( 'files/read', array( 'path' => $plugin_path . '/guides/design/wordpress.md' ), $key );
 	$assert( 200 === $r['status'] && false !== strpos( $r['data']['content'], 'Block Runner' ), 'Authenticated file HTTP retains public agent guidance' );

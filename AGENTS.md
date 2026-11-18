@@ -8,11 +8,19 @@
 - If a capability is optional, explain the fallback. If a required capability is unavailable, tell the user rather than claiming success.
 - Historical release notes and QA evidence may name the tools actually used; do not rewrite that history as current instructions.
 
-## Licensing scope
+## Free-edition access policy
 
-Toolbar visibility is site scoped. Fresh installations arm one-time defaults at activation; the first successful paid-license activation hides other non-owner administrators and records the owner as their contact. Mark already-active installations as existing before any license save, preserve prior installation state on reactivation, and never reset existing visibility or later owner choices. Hidden administrators without a purchased license cannot receive shared entitlement or use an existing trial; show only contact, purchase and own-license activation on the settings page. Keep the Plugins list and recovery page available. Administrators with their own site-bound purchased license always retain the toolbar and full settings, including renewal when expired, and cannot be hidden. Visibility changes require a purchased-license owner’s normal administrator session and cannot target the acting administrator. Retain the last managing owner as the contact when access is removed.
+Access and toolbar visibility are site scoped. The installing WordPress administrator starts as the protected controller; an explicit ownership transfer changes the protected controller. Fresh activation records the installer as controller and initially enables only them. Everyone using Guest Key, including the controller, must retain the WordPress administrator role on the current site.
 
-Licenses, trials, pending verification, and purchase matching are scoped to the owning WordPress administrator on the current site. Use `Guest_Key_License::option_name()` and `pending_name()` for current storage; the `OPTION`/`PENDING` constants refer only to legacy site-wide migration. License owners share one site-scoped access list (`Guest_Key_License::SHARING`); either owner’s last saved selection applies to other administrators without transferring individual license management. Until the first shared-list save, preserve legacy per-owner `shared_users` grants. Authorization during native authentication must receive an explicit user ID and perform no network/capability/current-user resolution. Keep license controls visible to unlicensed administrators, but never issue credentials without their own or shared entitlement.
+The controller and administrators with enabled shared access may grant and revoke access for other administrators or themselves, but never revoke the controller. Access-list changes require a normal administrator session; temporary Guest Key API and browser sessions must not change access grants. Hidden administrators see a controller-contact message, without payment or license entry. Keep the Plugins list and recovery page available.
+
+Upgrades preserve existing access and choose the earliest identifiable prior license owner as controller. If ownership cannot be identified, require an explicit claim through a normal WordPress administrator session; do not silently assign control. Preserve controller and access choices on reactivation. Never issue credentials to administrators without enabled access. Authorization during native authentication must receive an explicit user ID and perform no network/capability/current-user resolution.
+
+The free edition has no commercial licensing, trials, email verification or checkout flow. Add no telemetry, phone-home statistics or provider licensing requests.
+
+The current owner can use **Change owner** in a normal administrator session to transfer ownership to another eligible administrator. The new owner receives access; the previous owner keeps shared access and can subsequently be hidden. Shared administrators and temporary sessions cannot transfer ownership.
+
+If the controlling administrator is deleted or loses their administrator role on the site, reset Guest Key to unconfigured: clear shared access and revoke temporary credentials for that site. Another administrator may explicitly set it up again. Retain inert legacy licensing records until after rollout; never re-migrate them during this reset.
 
 ## Post metadata read policy
 

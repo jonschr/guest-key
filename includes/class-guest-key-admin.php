@@ -69,7 +69,7 @@ final class Guest_Key_Admin {
 	}
 
 	public static function toolbar( $bar ) {
-		if ( ! Guest_Key_Access::administrator() || Guest_Key_Browser::is_guest_session() || Guest_Key_License::toolbar_hidden( get_current_user_id() ) ) {
+		if ( ! Guest_Key_Access::administrator() || Guest_Key_Browser::is_guest_session() || Guest_Key_Site_Access::toolbar_hidden( get_current_user_id() ) ) {
 			return;
 		}
 		$bar->add_node( array(
@@ -88,7 +88,7 @@ final class Guest_Key_Admin {
 	}
 
 	public static function assets() {
-		if ( ! Guest_Key_Access::administrator() || Guest_Key_Browser::is_guest_session() || ( ! is_admin() && ( ! is_admin_bar_showing() || Guest_Key_License::toolbar_hidden( get_current_user_id() ) ) ) ) {
+		if ( ! Guest_Key_Access::administrator() || Guest_Key_Browser::is_guest_session() || ( ! is_admin() && ( ! is_admin_bar_showing() || Guest_Key_Site_Access::toolbar_hidden( get_current_user_id() ) ) ) ) {
 			return;
 		}
 		$url = plugin_dir_url( GUEST_KEY_FILE );
@@ -98,7 +98,7 @@ final class Guest_Key_Admin {
 		wp_enqueue_script( 'guest-key', $url . 'assets/guest-key.js', array(), $version, true );
 		wp_localize_script( 'guest-key', 'guestKey', array(
 			'ajaxUrl' => admin_url( 'admin-ajax.php' ), 'nonce' => wp_create_nonce( 'guest_key_access' ),
-			'licensing' => Guest_Key_License::view(),
+			'access' => Guest_Key_Site_Access::view(),
 			'noticeKey' => get_current_blog_id() . ':' . get_current_user_id(), 'settingsUrl' => self::page_url(),
 			'strings' => array(
 				'creating' => __( 'Preparing Guest Key…', 'guest-key' ), 'created' => __( 'Guest Key access created.', 'guest-key' ),
@@ -117,42 +117,18 @@ final class Guest_Key_Admin {
 				'manualCopy' => __( 'Select and copy these connection details using your browser’s Copy command.', 'guest-key' ),
 				'diagnosticsCopied' => __( 'Diagnostics copied. Share this report with support.', 'guest-key' ),
 				'diagnosticsSelect' => __( 'Diagnostics are selected. Use your browser’s Copy command.', 'guest-key' ),
-				'licenseSettings' => __( 'License', 'guest-key' ),
-				'trialTitle' => __( 'Free trial', 'guest-key' ), 'manageBilling' => __( 'Manage billing', 'guest-key' ),
-				'automaticLicense' => __( 'Purchasing with %s? Your license will connect automatically.', 'guest-key' ),
-				'sharedAccess' => __( 'Access is shared with you by %s.', 'guest-key' ),
-				'shareLicense' => __( 'Administrator access', 'guest-key' ),
+				'accessTitle' => __( 'Administrator access', 'guest-key' ),
 				'administrators' => __( 'Administrators', 'guest-key' ),
 				'accessNotEnabled' => __( 'Guest Key access is not currently enabled for your account.', 'guest-key' ),
-				'accessContact' => __( 'To request access, contact your administrator at %s.', 'guest-key' ),
-				'accessContactFallback' => __( 'To request access, contact a site administrator.', 'guest-key' ),
-				'accessPurchase' => __( 'You can also purchase your own license or enter an existing license key below to manage Guest Key with the other license owners on this site.', 'guest-key' ),
-				'purchaseLicense' => __( 'Purchase your own license', 'guest-key' ),
-				'shareAccess' => __( 'Enable shared access', 'guest-key' ),
+				'accessContact' => __( 'To request access, contact %s.', 'guest-key' ),
+				'accessContactFallback' => __( 'To request access, contact the site owner.', 'guest-key' ),
+				'shareAccess' => __( 'Enable Guest Key', 'guest-key' ),
 				'hideToolbar' => __( 'Hide Guest Key', 'guest-key' ),
-				'visibilityIntro' => __( 'Choose shared access or hide Guest Key for each administrator. License owners always retain access. The last saved selection applies.', 'guest-key' ),
-				'visibilitySaved' => __( 'Toolbar visibility updated.', 'guest-key' ),
-				'sharingSaved' => __( 'License sharing updated.', 'guest-key' ),
-				'opensNewTab' => __( '%s (opens in a new tab)', 'guest-key' ),
-				'claimExisting' => __( 'Claim existing license or trial', 'guest-key' ),
-				'claimIntro' => __( 'An existing license or trial could not be matched to an administrator. Claim it for your account if you manage it.', 'guest-key' ),
-				'licenseTitle' => __( 'Unlock Guest Key', 'guest-key' ),
-				'licenseRequired' => __( 'Guest Key is not licensed for your account. Enter your license key or email address to continue.', 'guest-key' ),
-				'trialIntro' => __( 'Try every feature free for 3 days. No card required.', 'guest-key' ),
-				'trialExpired' => __( 'Your free trial has ended. Add a license to keep connecting your agent.', 'guest-key' ),
-				/* translators: %s: Email address used for the trial. */
-				'trialExpiredEmail' => __( 'Your free trial for %s has ended. Add a license to keep connecting your agent.', 'guest-key' ),
-				'licenseExpired' => __( 'Your license has expired or is inactive. Renew it, then check again.', 'guest-key' ),
-				'licenseCheckNeeded' => __( 'Your license needs to be checked before connecting. Please try again.', 'guest-key' ),
-				'licenseActive' => __( 'Your license is active.', 'guest-key' ), 'trialActive' => __( 'Your free trial is active.', 'guest-key' ),
-				'email' => __( 'Email address', 'guest-key' ), 'sendCode' => __( 'Email me a code', 'guest-key' ),
-				'code' => __( 'Six-digit email code', 'guest-key' ), 'verifyCode' => __( 'Verify & start trial', 'guest-key' ),
-				'codeSent' => __( 'We sent a six-digit code to %s. Your trial starts after verification.', 'guest-key' ),
-				'changeEmail' => __( 'Change email or request a new code', 'guest-key' ),
-				'licenseKey' => __( 'License key', 'guest-key' ), 'activateLicense' => __( 'Activate license', 'guest-key' ),
-				'buyLicense' => __( 'Get a license key', 'guest-key' ), 'renewLicense' => __( 'Renew license', 'guest-key' ),
-				'checkLicense' => __( 'Check again', 'guest-key' ), 'removeLicense' => __( 'Remove my license', 'guest-key' ),
-				'working' => __( 'Working…', 'guest-key' ),
+				'changeOwner' => __( 'Change owner', 'guest-key' ),
+				'owner' => __( 'New owner', 'guest-key' ),
+				'selectAdministrator' => __( 'Select administrator', 'guest-key' ),
+				'accessSaved' => __( 'Administrator access saved.', 'guest-key' ),
+				'claimControl' => __( 'Set up Guest Key', 'guest-key' ),
 			),
 		) );
 	}
@@ -169,7 +145,7 @@ final class Guest_Key_Admin {
 	}
 
 	public static function diagnostics() {
-		if ( ! Guest_Key_Access::administrator() || Guest_Key_License::toolbar_hidden( get_current_user_id() ) ) {
+		if ( ! Guest_Key_Access::administrator() || Guest_Key_Site_Access::toolbar_hidden( get_current_user_id() ) ) {
 			return new WP_Error( 'guest_key_forbidden', __( 'Administrator access is required.', 'guest-key' ) );
 		}
 		require_once ABSPATH . 'wp-admin/includes/plugin.php';
@@ -209,17 +185,16 @@ final class Guest_Key_Admin {
 		if ( ! Guest_Key_Access::administrator() ) {
 			wp_die( esc_html__( 'Administrator access is required.', 'guest-key' ) );
 		}
-		$license = Guest_Key_License::view();
-		if ( $license['restricted'] ) {
+		$access = Guest_Key_Site_Access::view();
+		if ( $access['restricted'] || $access['needsSetup'] ) {
 			?>
 			<div class="wrap guest-key-page">
 				<h1><?php esc_html_e( 'Guest Key', 'guest-key' ); ?></h1>
-				<section class="guest-key-card" id="guest-key-license-settings" aria-labelledby="guest-key-license-settings-title">
-					<div data-guest-key-license-settings>
-						<h2 id="guest-key-license-settings-title"><?php esc_html_e( 'Guest Key access is not currently enabled for your account.', 'guest-key' ); ?></h2>
-						<p><?php echo esc_html( $license['contactEmail'] ? sprintf( __( 'To request access, contact your administrator at %s.', 'guest-key' ), $license['contactEmail'] ) : __( 'To request access, contact a site administrator.', 'guest-key' ) ); ?></p>
-						<p><a href="<?php echo esc_url( $license['checkout'] ); ?>"><?php esc_html_e( 'Purchase your own license', 'guest-key' ); ?></a></p>
-						<noscript><p><?php esc_html_e( 'Enable JavaScript to enter and activate your license key.', 'guest-key' ); ?></p></noscript>
+				<section class="guest-key-card" id="guest-key-access-settings" aria-labelledby="guest-key-access-settings-title">
+					<div data-guest-key-access-settings>
+						<h2 id="guest-key-access-settings-title"><?php esc_html_e( 'Guest Key access is not currently enabled for your account.', 'guest-key' ); ?></h2>
+						<p><?php echo esc_html( $access['contactEmail'] ? sprintf( __( 'To request access, contact %s.', 'guest-key' ), $access['contactEmail'] ) : __( 'To request access, contact the site owner.', 'guest-key' ) ); ?></p>
+						<noscript><p><?php esc_html_e( 'Enable JavaScript to manage administrator access.', 'guest-key' ); ?></p></noscript>
 					</div>
 				</section>
 			</div>
@@ -236,10 +211,10 @@ final class Guest_Key_Admin {
 			<h1><?php esc_html_e( 'Guest Key', 'guest-key' ); ?></h1>
 			<div class="guest-key-layout">
 			<div class="guest-key-controls">
-			<section class="guest-key-card guest-key-connect<?php echo ! $license['active'] ? ' guest-key-license-attention' : ''; ?>" id="guest-key-license-settings" aria-labelledby="guest-key-license-settings-title">
-				<div data-guest-key-license-settings>
-					<h2 id="guest-key-license-settings-title"><?php echo 'paid' === $license['kind'] ? esc_html__( 'License', 'guest-key' ) : esc_html__( 'Get started', 'guest-key' ); ?></h2>
-					<noscript><p><?php esc_html_e( 'Enable JavaScript to manage your license.', 'guest-key' ); ?></p></noscript>
+			<section class="guest-key-card guest-key-connect" id="guest-key-access-settings" aria-labelledby="guest-key-access-settings-title">
+				<div data-guest-key-access-settings>
+					<h2 id="guest-key-access-settings-title"><?php esc_html_e( 'Administrator access', 'guest-key' ); ?></h2>
+					<noscript><p><?php esc_html_e( 'Enable JavaScript to manage administrator access.', 'guest-key' ); ?></p></noscript>
 				</div>
 			</section>
 			<section class="guest-key-card guest-key-connect" aria-labelledby="guest-key-connect-title">

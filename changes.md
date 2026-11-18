@@ -1,5 +1,14 @@
 # Changes
 
+## 0.3.0 — 2026-11-18
+
+- Make Guest Key free with local administrator authorization. Remove commercial licensing, trials, email verification, purchase matching and provider requests. Add no telemetry.
+- Give the installing administrator immediate ownership. Let enabled administrators grant and revoke access, while protecting the current owner.
+- Add Change owner so the owner can transfer ownership to another eligible administrator. The previous owner retains shared access and can subsequently be hidden.
+- Migrate identifiable ownership and existing sharing locally. Offer explicit setup when ownership cannot be identified; preserve existing credential expiration and site isolation. Retain inert licensing records until after rollout.
+- Reset access when the owner is deleted or loses the administrator role. Revoke site-issued temporary credentials and let another administrator set up Guest Key again.
+- Simplify administrator controls while retaining the 1.5-second save debounce, temporary-access restrictions, source protection and native WordPress permissions.
+
 ## 0.2.13 — 2026-11-17
 
 - Retry outstanding MCP setup errors once after a plugin update on the next normal administrator visit. Add a nonce-protected Retry MCP setup action without issuing another credential.

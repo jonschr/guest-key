@@ -12,6 +12,7 @@ final class Guest_Key_Access {
 	const ROUTE = '/guest-key/v1/mcp';
 	const CRON = 'guest_key_expire';
 	private static $authenticated_user_id = 0;
+	private static $holding_lock = false;
 
 	public static function init() {
 		add_action( 'wp_authenticate_application_password_errors', array( __CLASS__, 'authenticate' ), 10, 3 );
@@ -46,7 +47,7 @@ final class Guest_Key_Access {
 	}
 
 	public static function set_duration( $minutes ) {
-		if ( Guest_Key_Browser::is_guest_session() || self::is_guest_request( get_current_user_id() ) || ! self::administrator() || Guest_Key_License::toolbar_hidden( get_current_user_id() ) ) { return new WP_Error( 'guest_key_forbidden', __( 'Only an administrator may change the access duration.', 'guest-key' ) ); }
+		if ( Guest_Key_Browser::is_guest_session() || self::is_guest_request( get_current_user_id() ) || ! self::administrator() || Guest_Key_Site_Access::toolbar_hidden( get_current_user_id() ) ) { return new WP_Error( 'guest_key_forbidden', __( 'Only an administrator may change the access duration.', 'guest-key' ) ); }
 		$minutes = self::valid_minutes( $minutes );
 		if ( false === $minutes ) { return new WP_Error( 'guest_key_duration', __( 'Enter a whole number of minutes from 30 to 1440 (24 hours).', 'guest-key' ) ); }
 		update_option( self::DURATION_OPTION, $minutes, false );
@@ -100,8 +101,10 @@ final class Guest_Key_Access {
 			return new WP_Error( 'guest_key_busy', __( 'Another access request is running for your account. Retry in a moment.', 'guest-key' ) );
 		}
 		try {
+			self::$holding_lock = true;
 			return $callback();
 		} finally {
+			self::$holding_lock = false;
 			if ( $switched ) {
 				switch_to_blog( get_main_site_id() );
 			}
@@ -127,11 +130,8 @@ final class Guest_Key_Access {
 		if ( ! wp_is_application_passwords_available_for_user( get_userdata( $user_id ) ) ) {
 			return new WP_Error( 'guest_key_passwords_disabled', __( 'Application passwords are unavailable. Use HTTPS and check your site’s application-password policy.', 'guest-key' ) );
 		}
-		// License refresh takes the same global lock; finish it before credential rotation.
-		$licensed = Guest_Key_License::require_access( $user_id );
-		if ( is_wp_error( $licensed ) ) { return $licensed; }
 		return self::locked( $user_id, static function () use ( $user_id ) {
-			if ( ! Guest_Key_License::active_until( $user_id ) ) { return new WP_Error( 'guest_key_license_required', __( 'Your Guest Key entitlement ended before access could be created. Check your license and retry.', 'guest-key' ) ); }
+			if ( ! Guest_Key_Site_Access::allowed( $user_id ) ) { return new WP_Error( 'guest_key_access_denied', __( 'Guest Key access is not currently enabled for your account. Contact the site’s controlling administrator.', 'guest-key' ) ); }
 			// Revoke all passwords with our app identifier, including any orphan from an interrupted request.
 			$old = self::grant( $user_id );
 			$revoked = self::remove_passwords( $user_id );
@@ -151,7 +151,7 @@ final class Guest_Key_Access {
 			}
 			list( $password, $item ) = $created;
 			$ttl = self::duration();
-			$grant = array( 'uuid' => $item['uuid'], 'ttl' => $ttl, 'expires' => min( $item['created'] + $ttl, Guest_Key_License::active_until( $user_id ) ), 'blog_id' => get_current_blog_id(), 'network_id' => get_current_network_id() );
+			$grant = array( 'uuid' => $item['uuid'], 'ttl' => $ttl, 'expires' => $item['created'] + $ttl, 'site' => Guest_Key_Site_Access::site(), 'blog_id' => get_current_blog_id(), 'network_id' => get_current_network_id() );
 			if ( ! update_user_meta( $user_id, self::META, $grant ) ) {
 				WP_Application_Passwords::delete_application_password( $user_id, $item['uuid'] );
 				return new WP_Error( 'guest_key_storage', __( 'Could not save temporary access. No credential was issued.', 'guest-key' ) );
@@ -236,27 +236,34 @@ final class Guest_Key_Access {
 
 	public static function revoke( $user_id, $uuid = null ) {
 		return self::locked( $user_id, static function () use ( $user_id, $uuid ) {
-			$grant = self::grant( $user_id );
-			// An old cron event must never delete a replacement credential.
-			if ( $uuid && ( ! $grant || $grant['uuid'] !== $uuid ) ) {
-				return true;
-			}
-			$result = self::remove_passwords( $user_id );
-			if ( is_wp_error( $result ) ) {
-				return $result;
-			}
-			if ( $grant ) {
-				self::clear_schedule( $user_id, $grant );
-			}
-			delete_user_meta( $user_id, self::META );
-			if ( $grant && (int) $grant['blog_id'] !== get_current_blog_id() ) {
-				switch_to_blog( $grant['blog_id'] );
-				Guest_Key_Dependency::maybe_disable();
-				restore_current_blog();
-			}
-			Guest_Key_Dependency::maybe_disable();
-			return true;
+			return self::revoke_in_transaction( $user_id, $uuid );
 		} );
+	}
+
+	/** Internal access-list changes share the credential transaction; never acquire a nested lock. */
+	public static function revoke_in_transaction( $user_id, $uuid = null ) {
+		if ( ! self::$holding_lock ) { return new WP_Error( 'guest_key_transaction', 'Credential cleanup requires an access transaction.' ); }
+
+		$grant = self::grant( $user_id );
+		// An old cron event must never delete a replacement credential.
+		if ( $uuid && ( ! $grant || $grant['uuid'] !== $uuid ) ) {
+			return true;
+		}
+		$result = self::remove_passwords( $user_id );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		if ( $grant ) {
+			self::clear_schedule( $user_id, $grant );
+		}
+		delete_user_meta( $user_id, self::META );
+		if ( $grant && (int) $grant['blog_id'] !== get_current_blog_id() ) {
+			switch_to_blog( $grant['blog_id'] );
+			Guest_Key_Dependency::maybe_disable();
+			restore_current_blog();
+		}
+		Guest_Key_Dependency::maybe_disable();
+		return true;
 	}
 
 	public static function expire( $user_id, $uuid ) {
@@ -284,12 +291,12 @@ final class Guest_Key_Access {
 		// may call wp_get_current_user(), recursively starting authentication again.
 		// Check administrator permissions only after authentication finishes. WordPress
 		// retains its own normal application-password API request detection.
-		if ( (int) $grant['blog_id'] !== get_current_blog_id() || (int) $grant['network_id'] !== get_current_network_id() ) {
+		if ( (int) $grant['blog_id'] !== get_current_blog_id() || (int) $grant['network_id'] !== get_current_network_id() || ! Guest_Key_Site_Access::grant_matches_site( $grant, $user->ID ) ) {
 			$error->add( 'guest_key_scope', __( 'This credential is restricted to its issuing site.', 'guest-key' ) );
 			return;
 		}
-		if ( ! Guest_Key_License::active_until( $user->ID ) ) {
-			$error->add( 'guest_key_license_required', __( 'The Guest Key trial or license has expired.', 'guest-key' ) );
+		if ( ! Guest_Key_Site_Access::allowed( $user->ID ) ) {
+			$error->add( 'guest_key_access_denied', __( 'Guest Key access is not enabled for this account.', 'guest-key' ) );
 		}
 	}
 
@@ -325,7 +332,7 @@ final class Guest_Key_Access {
 	public static function can_connect() {
 		// Authorization belongs here, where WordPress has established the current user.
 		$grant = self::grant( get_current_user_id() );
-		return self::administrator() && Guest_Key_License::active_until() && $grant && $grant['expires'] > time()
+		return self::administrator() && Guest_Key_Site_Access::allowed( get_current_user_id() ) && $grant && $grant['expires'] > time()
 			&& (int) $grant['blog_id'] === get_current_blog_id()
 			&& $grant['uuid'] === rest_get_authenticated_app_password();
 	}
@@ -342,7 +349,7 @@ final class Guest_Key_Access {
 		self::browser_request();
 		$result = self::create( get_current_user_id() );
 		if ( is_wp_error( $result ) ) {
-			wp_send_json_error( array( 'message' => $result->get_error_message(), 'licensing' => 'guest_key_license_required' === $result->get_error_code() ? Guest_Key_License::view() : null ), 400 );
+			wp_send_json_error( array( 'message' => $result->get_error_message(), 'access' => 'guest_key_access_denied' === $result->get_error_code() ? Guest_Key_Site_Access::view() : null ), 400 );
 		}
 		wp_send_json_success( $result );
 	}

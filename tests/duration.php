@@ -1,11 +1,11 @@
 <?php
 /** Local-only: native settings POST, boundary validation, and real REST/browser lifetime checks. */
 if ( ! defined( 'WP_CLI' ) || ! WP_CLI || is_multisite() || ! in_array( wp_get_environment_type(), array( 'local', 'development' ), true ) || ! Guest_Key_Access::administrator() ) { throw new RuntimeException( 'Run as an administrator on an isolated local single site.' ); }
-require_once __DIR__ . '/user-license-fixture.php';
+require_once __DIR__ . '/user-access-fixture.php';
 error_reporting( E_ALL & ~E_DEPRECATED );
 require_once ABSPATH . 'wp-admin/includes/user.php';
 $owner = get_current_user_id(); $cookies = $_COOKIE; $original = get_option( Guest_Key_Access::DURATION_OPTION, null );
-$license = get_option( Guest_Key_License::option_name(), null ); $grants = Guest_Key_Access::grants(); $uid = null; $checks = 0;
+$grants = Guest_Key_Access::grants(); $uid = null; $checks = 0;
 $mail = '__return_true'; add_filter( 'pre_wp_mail', $mail );
 $assert = static function ( $ok, $message ) use ( &$checks ) { if ( ! $ok ) { throw new RuntimeException( $message ); } $checks++; echo "PASS: {$message}\n"; };
 $http = static function ( $url, $args = array() ) {
@@ -37,6 +37,7 @@ try {
 	$uid = wp_insert_user( array( 'user_login' => 'gk-duration-' . strtolower( wp_generate_password( 8, false ) ), 'user_pass' => wp_generate_password( 32 ), 'role' => 'administrator' ) );
 	if ( is_wp_error( $uid ) ) { throw new RuntimeException( 'Could not create duration-test administrator.' ); }
 	wp_set_current_user( $uid );
+	guest_key_test_enable( $uid );
 	$token = WP_Session_Tokens::get_instance( $uid )->create( time() + HOUR_IN_SECONDS );
 	$_COOKIE[ LOGGED_IN_COOKIE ] = wp_generate_auth_cookie( $uid, time() + HOUR_IN_SECONDS, 'logged_in', $token );
 	$normal = array( new WP_Http_Cookie( array( 'name' => LOGGED_IN_COOKIE, 'value' => $_COOKIE[ LOGGED_IN_COOKIE ], 'path' => '/' ) ), new WP_Http_Cookie( array( 'name' => SECURE_AUTH_COOKIE, 'value' => wp_generate_auth_cookie( $uid, time() + HOUR_IN_SECONDS, 'secure_auth', $token ), 'path' => '/' ) ) );
@@ -48,8 +49,7 @@ try {
 	$r = $post( '29', wp_create_nonce( 'guest_key_duration' ) );
 	$assert( false !== strpos( wp_remote_retrieve_header( $r, 'location' ), 'invalid' ) && 1800 === $read(), 'Bypassing the input minimum preserves the previous setting' );
 	$assert( 403 === wp_remote_retrieve_response_code( $post( '1440', 'bad-nonce' ) ) && 1800 === $read(), 'A bad CSRF nonce cannot change the duration' );
-	update_option( Guest_Key_License::option_name(), array( 'kind' => 'paid', 'site' => trailingslashit( home_url( '/' ) ), 'status' => 'active', 'expires' => 0, 'checked' => time(), 'key' => 'fixture', 'instance' => 'fixture' ), false );
-	$key = guest_key_test_entitled_create( $uid ); if ( is_wp_error( $key ) ) { throw new RuntimeException( $key->get_error_message() ); }
+	$key = guest_key_test_enabled_create( $uid ); if ( is_wp_error( $key ) ) { throw new RuntimeException( $key->get_error_message() ); }
 	$g = Guest_Key_Access::grant( $uid );
 	$assert( 1800 === $g['ttl'] && abs( $g['expires'] - time() - 1800 ) <= 2, 'A 30-minute setting issues a 30-minute credential' );
 	$short_browser = $login( $key ); $short_cookies = wp_remote_retrieve_cookies( $short_browser );
@@ -59,7 +59,7 @@ try {
 	$age( 31 * MINUTE_IN_SECONDS, 1800 );
 	$assert( 401 === $rest( $key ), 'The original 30-minute ceiling survives a settings increase or forged future expiration' );
 	$assert( 302 === wp_remote_retrieve_response_code( $http( admin_url(), array( 'cookies' => $short_cookies ) ) ), 'The 30-minute browser session uses the original duration ceiling' );
-	$key = guest_key_test_entitled_create( $uid ); if ( is_wp_error( $key ) ) { throw new RuntimeException( $key->get_error_message() ); }
+	$key = guest_key_test_enabled_create( $uid ); if ( is_wp_error( $key ) ) { throw new RuntimeException( $key->get_error_message() ); }
 	$g = Guest_Key_Access::grant( $uid );
 	$assert( 86400 === $g['ttl'] && $g['expires'] > time() + 86300 && $g['expires'] <= time() + 86400, 'The maximum setting issues up to 24 hours of access' );
 	$age( 3 * HOUR_IN_SECONDS, 86400 );
@@ -77,16 +77,15 @@ try {
 	$assert( 401 === $rest( $key ), 'Legacy keys without a duration retain their two-hour maximum' );
 	$age( 0, 86401 );
 	$assert( 401 === $rest( $key ), 'A forged out-of-range grant duration fails closed' );
-	$l = get_option( Guest_Key_License::option_name() ); $l['expires'] = time() + 90; update_option( Guest_Key_License::option_name(), $l, false );
-	$key = guest_key_test_entitled_create( $uid );
-	$assert( ! is_wp_error( $key ) && Guest_Key_Access::grant( $uid )['expires'] === $l['expires'], 'Trial or license expiration still caps the selected access duration' );
+	$key = guest_key_test_enabled_create( $uid );
+	$assert( ! is_wp_error( $key ) && Guest_Key_Access::grant( $uid )['ttl'] === 1800, 'Free access uses only the configured duration' );
 	wp_set_current_user( 0 );
 	$assert( is_wp_error( Guest_Key_Access::set_duration( 120 ) ) && 1800 === Guest_Key_Access::duration(), 'An anonymous caller cannot change the setting' );
 } finally {
 	$_COOKIE = $cookies; wp_set_current_user( $owner );
 	if ( is_int( $uid ) && $uid > 0 ) { Guest_Key_Access::revoke( $uid ); wp_delete_user( $uid ); }
-	foreach ( array( Guest_Key_Access::DURATION_OPTION => $original, Guest_Key_License::option_name() => $license ) as $name => $value ) { if ( null === $value ) { delete_option( $name ); } else { update_option( $name, $value, false ); } }
+	foreach ( array( Guest_Key_Access::DURATION_OPTION => $original ) as $name => $value ) { if ( null === $value ) { delete_option( $name ); } else { update_option( $name, $value, false ); } }
 	remove_filter( 'pre_wp_mail', $mail );
 	$assert( $grants === Guest_Key_Access::grants(), 'Original site grants are preserved and temporary fixtures removed' );
 }
-echo "Completed {$checks} duration checks; original duration/license restored.\n";
+echo "Completed {$checks} duration checks; original duration restored.\n";

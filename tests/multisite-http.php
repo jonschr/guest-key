@@ -1,10 +1,10 @@
 <?php
-require_once __DIR__ . '/user-license-fixture.php';
+require_once __DIR__ . '/user-access-fixture.php';
 /** wp --user=admin eval-file tests/multisite-http.php on a local subdirectory network. */
 if ( ! defined( 'WP_CLI' ) || ! WP_CLI || ! is_multisite() || is_subdomain_install() || ! in_array( wp_get_environment_type(), array( 'local', 'development' ), true ) || ! is_super_admin() || ! Guest_Key_Dependency::network() ) { throw new RuntimeException( 'Use a local/development subdirectory network with network-active Guest Key as a super administrator.' ); }
 require_once ABSPATH . 'wp-admin/includes/ms.php';
 require_once ABSPATH . 'wp-admin/includes/plugin.php';
-$owner = get_current_user_id(); $main = get_current_blog_id(); $grants = Guest_Key_Access::grants();
+$original_cookies = $_COOKIE; $owner = get_current_user_id(); $main = get_current_blog_id(); $grants = Guest_Key_Access::grants();
 $adapter = is_plugin_active_for_network( Guest_Key_Dependency::PLUGIN );
 $managed = get_option( 'guest_key_adapter_managed', null ); $network_managed = get_site_option( 'guest_key_adapter_network_managed', null );
 $token = strtolower( wp_generate_password( 10, false ) ); $users = array(); $blog = null; $checks = 0;
@@ -27,36 +27,44 @@ try {
 	if ( is_wp_error( $blog ) ) { throw new RuntimeException( $blog->get_error_message() ); }
 	$main_help = get_rest_url( $main, 'guest-key/v1/help' ); $sub_help = get_rest_url( $blog, 'guest-key/v1/help' );
 	wp_set_current_user( $users['ordinary'] );
-	$assert( ! Guest_Key_Access::administrator() && is_wp_error( guest_key_test_entitled_create( $users['ordinary'] ) ), 'An ordinary multisite administrator cannot issue access' );
-	wp_set_current_user( $users['super'] ); $first = guest_key_test_entitled_create( $users['super'] );
+	$assert( ! Guest_Key_Access::administrator() && is_wp_error( guest_key_test_enabled_create( $users['ordinary'] ) ), 'An ordinary multisite administrator cannot issue access' );
+	wp_set_current_user( $users['super'] ); $first = guest_key_test_enabled_create( $users['super'] );
 	$assert( ! is_wp_error( $first ), 'A super administrator can issue a main-site credential' );
 	$r = $http( $main_help, $first ); $assert( 200 === $r['status'], 'Main-site credentials reach main-site command help' );
 	$r = $http( $sub_help, $first ); $assert( 401 === $r['status'] && 'guest_key_scope' === ( $r['data']['code'] ?? '' ), 'A main-site key cannot authenticate on a subsite (HTTP ' . $r['status'] . ', ' . ( $r['data']['code'] ?? 'no JSON error' ) . ')' );
 	switch_to_blog( $blog );
-	try { $second = guest_key_test_entitled_create( $users['super'] ); $login = Guest_Key_Browser::url(); $sub_admin = admin_url(); }
+	try { $second = guest_key_test_enabled_create( $users['super'] ); $login = Guest_Key_Browser::url(); $sub_admin = admin_url(); }
 	finally { restore_current_blog(); }
 	$assert( ! is_wp_error( $second ) && (int) $blog === (int) Guest_Key_Access::grant( $users['super'] )['blog_id'], 'Issuing on a subsite binds the replacement key to that site' );
 	$r = $http( $sub_help, $second ); $assert( 200 === $r['status'], 'The replacement key reaches subsite command help' );
 	$r = $http( $main_help, $second ); $assert( 401 === $r['status'] && 'guest_key_scope' === $r['data']['code'], 'A subsite key cannot authenticate on the main site' );
 	$r = $http( $main_help, $first ); $assert( 401 === $r['status'], 'Issuing on another site revokes the earlier key' );
+	wp_set_current_user( $owner );
+	$normal_token = WP_Session_Tokens::get_instance( $owner )->create( time() + HOUR_IN_SECONDS );
+	$_COOKIE[ LOGGED_IN_COOKIE ] = wp_generate_auth_cookie( $owner, time() + HOUR_IN_SECONDS, 'logged_in', $normal_token );
+	$assert( true === Guest_Key_Site_Access::set_access( $users['super'], false ), 'Main-site access revocation succeeds in a normal administrator session' );
+	$r = $http( $sub_help, $second ); $assert( 200 === $r['status'], 'Main-site revocation preserves another subsite credential' );
+	$assert( true === Guest_Key_Site_Access::set_access( $users['super'], true ), 'Main-site access can be granted again' );
+	$r = $http( $sub_help, $second ); $assert( 200 === $r['status'], 'Main-site grant preserves another subsite credential' );
+	WP_Session_Tokens::get_instance( $owner )->destroy( $normal_token ); $_COOKIE = $original_cookies; wp_set_current_user( $users['super'] );
 	$option = 'gk_network_fixture_' . $token;
 	$commands = array( 'commands' => array( array( 'command' => 'option update', 'input' => array( 'key' => $option, 'value' => 'subsite-only' ) ) ) );
 	$r = $http( get_rest_url( $blog, 'guest-key/v1/run' ), $second, 'POST', $commands );
 	$assert( 200 === $r['status'] && $r['data']['ok'] && 'subsite-only' === get_blog_option( $blog, $option ) && false === get_blog_option( $main, $option ), 'Generic data writes stay on the issuing subsite' );
 	$r = $http( add_query_arg( 'path', 'plugins/guest-key/guest-key.php', get_rest_url( $blog, 'guest-key/v1/files/read' ) ), $second );
-	$assert( 200 === $r['status'] && false !== strpos( $r['data']['content'], 'Plugin Name: Guest Key' ), 'The issuing subsite provides read-only source inspection' );
+	$assert( 403 === $r['status'] && 'guest_key_file_denied' === $r['data']['code'], 'The issuing subsite excludes Guest Key implementation source' );
 	$r = $http( $login );
 	if ( ! preg_match( '/name="guest_key_nonce"\s+value="([^"]+)"/', wp_remote_retrieve_body( $r['response'] ), $nonce ) ) { throw new RuntimeException( 'Subsite login form is missing.' ); }
 	$r = $http( $login, null, 'POST', array( 'log' => $second['username'], 'pwd' => $second['password'], 'guest_key_nonce' => $nonce[1] ) );
 	$cookies = wp_remote_retrieve_cookies( $r['response'] );
 	$assert( 302 === $r['status'] && count( $cookies ) >= 2, 'A subsite credential signs into its browser form' );
 	$r = $http( $sub_admin, null, 'GET', array(), $cookies ); $assert( 200 === $r['status'], 'The temporary browser session accesses its issuing subsite' );
-	$r = $http( admin_url(), null, 'GET', array(), $cookies ); $assert( in_array( $r['status'], array( 302, 403 ), true ), 'The temporary browser session cannot access the main-site dashboard' );
+	$r = $http( admin_url(), null, 'GET', array(), $cookies ); $assert( in_array( $r['status'], array( 302, 403 ), true ), 'The temporary browser session cannot access the main-site dashboard (HTTP ' . $r['status'] . ', redirect: ' . wp_parse_url( wp_remote_retrieve_header( $r['response'], 'location' ), PHP_URL_PATH ) . ')' );
 	switch_to_blog( $blog );
 	try {
 		get_userdata( $users['super'] )->set_role( 'subscriber' );
-		$assert( is_super_admin( $users['super'] ) && user_can( $users['super'], 'manage_options' ) && ! Guest_Key_Access::administrator( $users['super'] ) && is_wp_error( guest_key_test_entitled_create( $users['super'] ) ), 'A super administrator must also have the administrator role on the issuing subsite' );
-		$r = $http( $sub_help, $second ); $assert( 403 === $r['status'], 'Removing only the issuing-site administrator role ends network API access' );
+		$assert( is_super_admin( $users['super'] ) && user_can( $users['super'], 'manage_options' ) && ! Guest_Key_Access::administrator( $users['super'] ) && is_wp_error( guest_key_test_enabled_create( $users['super'] ) ), 'A super administrator must also have the administrator role on the issuing subsite' );
+		$r = $http( $sub_help, $second ); $assert( 401 === $r['status'], 'Removing only the issuing-site administrator role ends network API access' );
 		$r = $http( $sub_admin, null, 'GET', array(), $cookies ); $assert( 302 === $r['status'], 'Removing the issuing-site administrator role ends its Guest Key browser session' );
 	} finally { get_userdata( $users['super'] )->set_role( 'administrator' ); restore_current_blog(); }
 	wp_set_current_user( $owner ); revoke_super_admin( $users['super'] );
@@ -67,6 +75,8 @@ try {
 	$assert( true === Guest_Key_Access::revoke( $users['super'] ), 'Network credentials can be revoked from the main site' );
 	$r = $http( $sub_help, $second ); $assert( 401 === $r['status'], 'Revoked subsite credentials no longer authenticate' );
 } finally {
+	$_COOKIE = $original_cookies;
+	if ( isset( $normal_token ) ) { WP_Session_Tokens::get_instance( $owner )->destroy( $normal_token ); }
 	while ( ms_is_switched() ) { restore_current_blog(); }
 	wp_set_current_user( $owner );
 	foreach ( $users as $id ) { Guest_Key_Access::revoke( $id ); revoke_super_admin( $id ); wpmu_delete_user( $id ); }

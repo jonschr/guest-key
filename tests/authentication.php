@@ -6,7 +6,7 @@
 if ( ! defined( 'WP_CLI' ) || ! WP_CLI || is_multisite() || ! in_array( wp_get_environment_type(), array( 'local', 'development' ), true ) ) {
 	throw new RuntimeException( 'Use WP-CLI on a local/development single site.' );
 }
-require_once __DIR__ . '/user-license-fixture.php';
+require_once __DIR__ . '/user-access-fixture.php';
 error_reporting( E_ALL & ~E_DEPRECATED );
 
 $checks = 0;
@@ -66,7 +66,7 @@ register_post_meta( 'post', '_gk_transport_denied', array( 'type' => 'string', '
 try {
 	$uid = wp_insert_user( array( 'user_login' => 'guest-key-auth-test-' . wp_generate_password( 10, false ), 'user_pass' => wp_generate_password( 32 ), 'role' => 'administrator' ) );
 	$assert( ! is_wp_error( $uid ), 'Create a temporary authentication-test administrator' );
-	guest_key_test_entitle( $uid );
+	guest_key_test_enable( $uid );
 	$meta_post_id = wp_insert_post( array( 'post_title' => 'Guest Key metadata transport fixture', 'post_status' => 'draft', 'post_author' => $uid ), true );
 	$assert( ! is_wp_error( $meta_post_id ), 'Create a temporary post for metadata transport checks' );
 	add_post_meta( $meta_post_id, '_land_co_property_sms_number', '555-0100' );
@@ -77,7 +77,7 @@ try {
 	$created = WP_Application_Passwords::create_new_application_password( $uid, array( 'name' => 'Guest Key authentication regression', 'app_id' => Guest_Key_Access::APP_ID ) );
 	$assert( ! is_wp_error( $created ), 'Create a temporary native application password' );
 	list( $password, $item ) = $created;
-	$grant = array( 'uuid' => $item['uuid'], 'expires' => time() + Guest_Key_Access::TTL, 'blog_id' => get_current_blog_id(), 'network_id' => get_current_network_id() );
+	$grant = array( 'site' => Guest_Key_Site_Access::site(), 'uuid' => $item['uuid'], 'expires' => time() + Guest_Key_Access::TTL, 'blog_id' => get_current_blog_id(), 'network_id' => get_current_network_id() );
 	update_user_meta( $uid, Guest_Key_Access::META, $grant );
 	$_SERVER['PHP_AUTH_USER'] = get_userdata( $uid )->user_login;
 	$_GET['rest_route'] = Guest_Key_Access::ROUTE;

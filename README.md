@@ -1,6 +1,6 @@
 # Guest Key
 
-Get your AI agent working on your WordPress site in one click. Guest Key gives it temporary access to edit content, manage media, and handle site administration without sharing your WordPress password.
+Get your AI agent working on your WordPress site in one click, for free. Guest Key gives it temporary access to edit content, manage media, and handle site administration without sharing your WordPress password.
 
 [Download Guest Key](https://github.com/jonschr/guest-key/releases/latest/download/guest-key.zip)
 
@@ -8,11 +8,11 @@ Get your AI agent working on your WordPress site in one click. Guest Key gives i
 
 Click **Copy Guest Key**, paste the connection details into your AI agent, and get to work. Your agent can connect through native WordPress REST commands, an optional MCP endpoint, or a temporary browser sign-in. Use an agent that supports one of those methods; no particular AI provider or app is required.
 
-AI task traffic travels directly between your agent and your website.
+AI task traffic travels directly between your agent and your website. The free edition adds no telemetry, phone-home statistics, or provider licensing requests.
 
 ## Give access a clear finish line
 
-Guest Keys expire after two hours by default. Choose a duration from 30 minutes to 24 hours, or revoke access sooner. Creating a new key replaces the previous one, and access cannot outlast the account’s trial or license entitlement.
+Guest Keys expire after two hours by default. Choose a duration from 30 minutes to 24 hours, or revoke access sooner. Creating a new key replaces the previous one.
 
 Expiration stops future requests. It does not undo changes already made to the site.
 
@@ -24,15 +24,21 @@ There is no direct file-writing tool, shell, or SQL console. Your agent can insp
 
 Temporary Guest Key credentials and browser sessions cannot install, update, delete, activate or deactivate plugins, switch or modify themes, update WordPress core, or change the access duration. Media uploads remain available. Normal administrator sessions retain site maintenance and MCP Adapter setup. These restrictions govern supported WordPress operations; they do not sandbox arbitrary third-party plugin code.
 
+Use native, editable WordPress blocks for page content, with limited HTML exceptions and the theme’s design tokens. The optional Block Runner skill can help with Gutenberg work; agents without skills or local tooling can follow the bundled Markdown guidance and use native block markup through supported WordPress operations.
+
 Work that requires writing code files should generally happen locally with a website professional, testing and an independent recovery route. A live-site outage can cut off an agent’s access before it can repair the problem.
 
 ## Choose who can use it
 
-On a new installation, the first successful paid-license activation hides Guest Key from the other administrators and identifies the activating owner as their contact. Existing installations keep their current visibility settings, and later activations do not reset an owner’s choices. Administrators with their own purchased licenses always retain access.
+The installing administrator starts as the protected owner. Fresh activation records that administrator and initially enables only them. Everyone using Guest Key, including the controller, must have the WordPress administrator role on the current site.
 
-Licenses and verified trials belong to the administrator who activates them. License owners can enable shared access for other administrators on the same site. When several owners manage access, the last saved selection applies; each owner keeps control of their own license and always retains Guest Key access.
+The controller and administrators with enabled shared access can grant and revoke access for other administrators or themselves, but can never revoke the controller. Hidden administrators see a message directing them to contact the controller; there is no payment or license-entry flow.
 
-Hidden administrators see a contact, purchase, and license-entry page. Activating their own purchased license gives them full controls alongside the other owners. An administrator needs their own entitlement or shared access before Guest Key will issue a credential.
+Upgrades preserve existing access and select the earliest identifiable prior license owner as controller. If ownership cannot be identified, a WordPress administrator must explicitly claim control through a normal administrator session. Reactivation preserves existing access and controller choices. Old licensing records remain inert locally for rollback; the free edition never contacts licensing providers.
+
+The current owner can use **Change owner** in a normal administrator session to transfer ownership to another eligible administrator. The new owner receives access; the previous owner keeps shared access and can subsequently be hidden. Shared administrators and temporary sessions cannot transfer ownership.
+
+If the controlling administrator is deleted or loses their administrator role on the site, reset Guest Key to unconfigured: clear shared access and revoke temporary credentials for that site. Another administrator may explicitly set it up again. Retain inert legacy licensing records until after rollout; never re-migrate them during this reset.
 
 ## Tools
 
@@ -54,9 +60,9 @@ Hidden administrators see a contact, purchase, and license-entry page. Activatin
 
 ## Get started
 
-Requires WordPress 6.9+, PHP 7.4+, HTTPS, and administrator application passwords. New verified trials last three days.
+Requires WordPress 6.9+, PHP 7.4+, HTTPS, and administrator application passwords.
 
-Install and activate Guest Key, open its settings, and verify your email for a trial or enter your license key. Then click **Copy Guest Key** and paste it into your AI agent.
+Install and activate Guest Key as the administrator who will control access. Open its settings, then click **Copy Guest Key** and paste it into your AI agent.
 
 Guest Key installs the optional official MCP Adapter through WordPress’s native installer. If automatic installation is blocked, install and activate MCP Adapter from Plugins → Add New, then retry. Native REST commands and temporary browser sign-in remain available without MCP. After an update, an outstanding MCP setup failure is retried once on the next normal administrator visit. The warning also offers **Retry MCP setup** without creating a new Guest Key.
 

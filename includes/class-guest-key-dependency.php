@@ -53,7 +53,7 @@ final class Guest_Key_Dependency {
 	public static function can_retry() {
 		return Guest_Key_Access::administrator() && ! Guest_Key_Browser::is_guest_session()
 			&& ! Guest_Key_Access::is_guest_request( get_current_user_id() ) && ! rest_get_authenticated_app_password()
-			&& wp_get_session_token() && ! Guest_Key_License::toolbar_hidden( get_current_user_id() )
+			&& wp_get_session_token() && ! Guest_Key_Site_Access::toolbar_hidden( get_current_user_id() )
 			&& current_user_can( 'activate_plugins' ) && ( ! self::network() || current_user_can( 'manage_network_plugins' ) );
 	}
 

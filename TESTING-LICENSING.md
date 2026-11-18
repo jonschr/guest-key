@@ -1,3 +1,7 @@
+# Historical validation archive
+
+These records describe releases through 0.2.13. Commercial licensing tests and setup instructions below are historical and do not apply to the free edition. Current access tests are `tests/site-access.php` and `tests/access-controls.cjs`. This file is excluded from distribution.
+
 # 0.2.13 release validation — 2026-11-17
 
 The final source passed 222 checks: diagnostics/recovery 21, administrator licensing/sharing 41, visibility 36, licensing 29, activation redirects 14, automatic purchase matching 20, settings 22, isolated installer failure handling 11 and JavaScript 28. These cover stale-error recovery without credential rotation, once-per-version retry, explicit setup retry, replacement of outdated failures, fresh-install visibility defaults, failed-key behavior and preservation of existing installation settings. Provider responses and the pristine-install state query were simulated; visibility fixtures were limited to disposable administrators. Original site options, sessions and grants were preserved or restored.

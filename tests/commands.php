@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/user-license-fixture.php';
+require_once __DIR__ . '/user-access-fixture.php';
 /** wp --user=admin eval-file tests/commands.php; temporary content and credentials are removed. */
 if ( ! defined( 'WP_CLI' ) || ! WP_CLI || ! in_array( wp_get_environment_type(), array( 'local', 'development' ), true ) || ! Guest_Key_Access::administrator() ) {
 	throw new RuntimeException( 'Use WP-CLI as an administrator on a local/development site.' );
@@ -128,7 +128,7 @@ try {
 	$failed = $run( array( array( 'command' => 'plugin install', 'input' => array( 'slug' => 'hello-dolly' ) ) ) );
 	$assert( ! $failed['ok'], 'Command plugin installation preserves native permissions' );
 	remove_filter( 'user_has_cap', $deny );
-	$key = guest_key_test_entitled_create( $uid );
+	$key = guest_key_test_enabled_create( $uid );
 	if ( is_wp_error( $key ) ) { throw new RuntimeException( $key->get_error_message() ); }
 	$assert( false !== strpos( $key['bundle'], '1. Discover commands: GET ' ) && false !== strpos( $key['bundle'], 'Before layout or content edits, load "design guide"' ), 'Copied connection bundle teaches commands and design guide discovery' );
 	$assert( false !== strpos( $key['bundle'], 'Read-only example: {"commands":[{"command":"post list","input":{"post_type":"any"}}]}' ) && false !== strpos( $key['bundle'], 'Command names are JSON values, not shell commands.' ), 'Connection example discovers content without assuming terminal access or installing a plugin' );

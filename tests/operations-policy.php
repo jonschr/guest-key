@@ -1,6 +1,6 @@
 <?php
 /** Local HTTP/command regression. Requires the temporary operations-fixture.php MU plugin. */
-require_once __DIR__ . '/user-license-fixture.php';
+require_once __DIR__ . '/user-access-fixture.php';
 if (!defined('WP_CLI') || !WP_CLI || 'local'!==wp_get_environment_type() || !Guest_Key_Access::administrator() || !has_action('gk_operations_fixture')) {throw new RuntimeException('Use the isolated local operations fixture.');}
 require_once ABSPATH.'wp-admin/includes/user.php'; require_once ABSPATH.'wp-admin/includes/plugin.php';
 $media=null; $owner=get_current_user_id();$uid=null;$term=null;$checks=0;$created_hooks=array();$adapter=is_plugin_active(Guest_Key_Dependency::PLUGIN);$managed=get_option('guest_key_adapter_managed',null);
@@ -31,7 +31,7 @@ try {
  foreach(array('_gk_operations_denied','étiquette','empty','missing') as $name){$r=$run('term meta get',array('term_id'=>$term,'key'=>$name));$v=$r['results'][0]['data'];$assert($r['ok']&&$v['exists']===('missing'!==$name),'Term reads preserve protected/non-ASCII/empty/missing key semantics: '.$name);}
  $assert(!$run('term meta update',array('term_id'=>$term,'key'=>'_gk_operations_denied','value'=>'denied'))['ok'],'Term reads do not loosen write permissions');
  $uid=wp_insert_user(array('user_login'=>'gk-operations-'.wp_generate_password(8,false),'user_pass'=>wp_generate_password(32),'role'=>'administrator','user_email'=>'gk-'.wp_generate_password(8,false).'@example.invalid'));
- wp_set_current_user($uid);$key=guest_key_test_entitled_create($uid);$assert(!is_wp_error($key),'Temporary administrator receives a test-entitled key');
+ wp_set_current_user($uid);$key=guest_key_test_enabled_create($uid);$assert(!is_wp_error($key),'Temporary administrator receives a test-entitled key');
  Guest_Key_Access::authenticated(get_userdata($uid),WP_Application_Passwords::get_user_application_password($uid,Guest_Key_Access::grant($uid)['uuid']));
  try {foreach(array('create_users','promote_users','promote_user','delete_user') as $cap){$assert(!current_user_can($cap,$owner),'Temporary API credentials lose native capability '.$cap);}$assert(current_user_can('edit_posts'),'Temporary API credentials retain content editing');}
  finally {Guest_Key_Access::authentication_failed();}

@@ -6,14 +6,11 @@
 	let dialog;
 	let dismissTimer;
 	let returnFocus;
-	let licensing = guestKey.licensing;
-	let licensePanel;
+	let access = guestKey.access;
 	let copiedTimer;
-	let purchaseCheck;
-	let purchaseCheckedAt = 0;
 	const toolbarItem = document.querySelector('#wp-admin-bar-guest-key-access');
 	const toolbarLink = toolbarItem?.querySelector(':scope > .ab-item');
-	const licenseSettings = document.querySelector('[data-guest-key-license-settings]');
+	const accessSettings = document.querySelector('[data-guest-key-access-settings]');
 	const settingsLink = document.querySelector('#wp-admin-bar-guest-key-settings > .ab-item');
 	const toolbarRevoke = document.querySelector('#wp-admin-bar-guest-key-revoke');
 	const initialGrantStatus = document.getElementById('guest-key-grant-status');
@@ -77,203 +74,112 @@
 	}
 
 	async function request(action, values = {}) {
-		// Finish an outstanding purchase claim before changing the saved license.
-		if (action.startsWith('guest_key_license_') && action !== 'guest_key_license_status') await purchaseCheck;
 		const response = await fetch(guestKey.ajaxUrl, {
 			method: 'POST', credentials: 'same-origin', cache: 'no-store',
 			body: new URLSearchParams({ ...values, action, nonce: guestKey.nonce })
 		});
 		let result;
 		try { result = await response.json(); } catch { throw new Error(s.error); }
-		if (result.data?.licensing) licensing = result.data.licensing;
+		if (result.data?.access) access = result.data.access;
 		if (!response.ok || !result.success) {
 			const error = new Error(result.data?.message || s.error);
-			error.licensing = result.data?.licensing;
 			throw error;
 		}
 		return result.data;
 	}
 
-	function licenseNotice(message = '', editEmail = false, takeFocus = true) {
-		if (!licenseSettings) { location.assign(guestKey.settingsUrl + '#guest-key-license-settings'); return; }
-		clearTimeout(dismissTimer);
-		if (notice) notice.hidden = true;
-		licensePanel = licenseSettings;
-		licensePanel.closest('#guest-key-license-settings').classList.toggle('guest-key-license-attention', !licensing?.active);
-
-		if (message === s.codeSent) message = s.codeSent.replace('%s', licensing.email);
-		const title = licensing?.kind === 'paid' || licensing?.kind === 'shared' ? s.licenseSettings : licensing?.active ? s.trialTitle : s.licenseTitle;
-		licensePanel.removeAttribute('aria-live');
-		const heading = document.createElement('h2'); heading.textContent = title;
-		heading.id = 'guest-key-license-settings-title';
+	function renderAccess() {
+		if (!accessSettings) return;
+		const heading = document.createElement('h2'); heading.textContent = s.accessTitle;
+		heading.id = 'guest-key-access-settings-title';
 		const intro = document.createElement('p');
-		intro.textContent = licensing?.active ? (licensing.kind === 'paid' ? s.licenseActive : s.trialActive)
-			: licensing?.kind === 'paid' ? (licensing.expired ? s.licenseExpired : s.licenseCheckNeeded)
-				: licensing?.expired ? (licensing.email ? s.trialExpiredEmail.replace('%s', licensing.email) : s.trialExpired) : s.trialIntro;
-		if (licensing?.sharedBy?.length && !licensing.ownActive) intro.textContent = s.sharedAccess.replace('%s', licensing.sharedBy.join(', '));
-		const feedback = document.createElement('p'); feedback.className = 'guest-key-license-feedback';
-		feedback.setAttribute('role', 'status'); feedback.setAttribute('aria-live', 'polite'); feedback.textContent = message === intro.textContent ? '' : message;
-		licensePanel.replaceChildren(heading, intro, feedback);
-		let savePendingChoices = async () => {};
-		async function run(callback) {
-			if (busy) return;
-			setBusy(true); licensePanel.querySelectorAll('button, input').forEach(item => { item.disabled = true; }); feedback.textContent = s.working;
-			try { await savePendingChoices(); await callback(); }
-			catch (error) { feedback.textContent = error.message || s.error; }
-			finally { setBusy(false); licensePanel.querySelectorAll('button, input').forEach(item => { item.disabled = item.hasAttribute('data-guest-key-disabled'); }); }
-		}
-		function action(label, callback, parent = licensePanel) {
-			const button = document.createElement('button'); button.type = 'button'; button.textContent = label;
-			button.className = 'button';
-			button.addEventListener('click', () => run(callback)); parent.append(button); return button;
-		}
-		function form(label, type, submit, callback, parent = licensePanel) {
-			const form = document.createElement('form'); const fieldLabel = document.createElement('label'); fieldLabel.textContent = label;
-			const input = document.createElement('input'); input.type = type === 'code' ? 'text' : type; input.required = true; input.setAttribute('aria-label', label);
-			input.autocomplete = type === 'email' ? 'email' : type === 'code' ? 'one-time-code' : 'off';
-			if (type === 'code') { input.inputMode = 'numeric'; input.pattern = '[0-9]{6}'; input.maxLength = 6; }
-			if (type === 'email') input.value = licensing?.email || '';
-			if (type === 'text') {
-				input.maxLength = 200; input.spellcheck = false; input.autocapitalize = 'off'; input.setAttribute('autocorrect', 'off');
-			}
-			input.className = 'regular-text'; fieldLabel.append(document.createElement('br'));
-			fieldLabel.append(input);
-			const button = document.createElement('button'); button.type = 'submit'; button.textContent = submit;
-			button.className = 'button button-primary';
-			const fieldRow = document.createElement('p'); fieldRow.append(fieldLabel);
-			const submitRow = document.createElement('p'); submitRow.append(button); form.append(fieldRow, submitRow);
-			form.addEventListener('submit', event => { event.preventDefault(); run(() => callback(input.value)); }); parent.append(form); return input;
-		}
-		if (licensing.restricted) {
-			heading.textContent = s.accessNotEnabled;
-			intro.textContent = licensing.contactEmail ? s.accessContact.replace('%s', licensing.contactEmail) : s.accessContactFallback;
-			const explanation = document.createElement('p'); explanation.textContent = s.accessPurchase;
-			const purchase = document.createElement('a'); purchase.textContent = s.purchaseLicense;
-			purchase.href = licensing.checkout; purchase.className = 'button';
-			licensePanel.append(explanation, purchase);
-			const input = form(s.licenseKey, 'text', s.activateLicense, async key => {
-				await request('guest_key_license_activate', {key});
-				location.reload();
+		const feedback = document.createElement('p'); feedback.className = 'guest-key-access-feedback';
+		feedback.setAttribute('role', 'status'); feedback.setAttribute('aria-live', 'polite');
+		accessSettings.replaceChildren(heading, intro, feedback);
+		if (access.needsSetup) {
+			intro.remove();
+			const button = document.createElement('button'); button.type = 'button'; button.className = 'button'; button.textContent = s.claimControl;
+			button.addEventListener('click', async () => {
+				if (button.disabled) return;
+				button.disabled = true;
+				try { await request('guest_key_claim_control'); location.reload(); }
+				catch (error) { feedback.textContent = error.message; button.disabled = false; }
 			});
-			if (takeFocus) input.focus();
+			accessSettings.append(button); return;
+		}
+		if (access.restricted) {
+			heading.textContent = s.accessNotEnabled;
+			intro.textContent = access.contactEmail ? s.accessContact.replace('%s', access.contactEmail) : s.accessContactFallback;
 			return;
 		}
-		const keyColumn = document.createElement('div');
-		const emailColumn = document.createElement('div');
-		const showTrial = !licensing?.active && licensing?.kind !== 'paid' && !licensing?.expired;
-		if (licensing?.kind !== 'paid') {
-			const columns = document.createElement('div'); columns.className = 'guest-key-license-columns';
-			columns.append(keyColumn);
-			if (showTrial) columns.append(emailColumn);
-			licensePanel.append(columns);
-		}
-		let focus;
-		if (showTrial) {
-			if (licensing?.pending && !editEmail) {
-				if (!message) feedback.textContent = s.codeSent.replace('%s', licensing.email);
-				focus = form(s.code, 'code', s.verifyCode, async code => { await request('guest_key_license_verify', {code}); licenseNotice(s.trialActive); }, emailColumn);
-				action(s.changeEmail, async () => { licenseNotice('', true); }, emailColumn);
-			} else {
-				focus = form(s.email, 'email', s.sendCode, async email => { await request('guest_key_license_email', {email, fresh: editEmail ? '1' : '0'}); licenseNotice(s.codeSent); }, emailColumn);
-			}
-		}
-		const licenseActions = document.createElement('p');
-		if (licensing?.kind === 'paid') {
-			licensePanel.append(licenseActions);
-			if (!licensing.ownActive) action(s.checkLicense, async () => { await request('guest_key_license_status'); licenseNotice(); }, licenseActions);
-			action(s.removeLicense, async () => { await request('guest_key_license_remove'); if (licensing.restricted) location.reload(); else licenseNotice(); }, licenseActions);
-		} else {
-			const input = form(s.licenseKey, 'text', s.activateLicense, async key => { await request('guest_key_license_activate', {key}); licenseNotice(s.licenseActive); }, keyColumn);
-			focus ||= input;
-		}
-		if (licensing.administrators?.length) {
-			const sharing = document.createElement('section');
-			const sharingHeading = document.createElement('h3'); sharingHeading.textContent = licensing.kind === 'paid' ? s.shareLicense : s.administrators; sharingHeading.id = 'guest-key-sharing-title';
-			sharing.setAttribute('aria-labelledby', sharingHeading.id);
-			const description = document.createElement('p'); description.textContent = s.visibilityIntro;
-			sharing.append(sharingHeading, description);
-			const choices = [];
-			function syncChoices() {
-				choices.forEach(({share, hide, id}) => {
-					const admin = licensing.administrators.find(admin => admin.id === id);
-					share.checked = !!admin?.shared; hide.checked = !!admin?.hidden;
-					if (!licensing.canManageAccess || admin?.ownsLicense) share.setAttribute('data-guest-key-disabled', '');
-					else share.removeAttribute('data-guest-key-disabled');
-					if (!licensing.canManageAccess || admin?.ownsLicense) hide.setAttribute('data-guest-key-disabled', '');
-					else hide.removeAttribute('data-guest-key-disabled');
-					hide.disabled = hide.hasAttribute('data-guest-key-disabled');
-					share.disabled = share.hasAttribute('data-guest-key-disabled');
-				});
-			}
-			let saveTimer;
-			savePendingChoices = async () => {
-				if (!saveTimer) return;
-				clearTimeout(saveTimer); saveTimer = null;
-				const visibility = choices.filter(({hide, id}) => hide.checked !== !!licensing.administrators.find(admin => admin.id === id)?.hidden)
-					.map(({hide, id}) => ({id, hidden: hide.checked}));
-				const users = choices.filter(({share, hide}) => share.checked && !hide.checked).map(({id}) => id);
-				let message = '';
-				try {
-					// Hide first: visibility changes remove shares from every license owner.
-					for (const {id, hidden} of visibility) {
-						await request('guest_key_license_visibility', {user: String(id), hidden: hidden ? '1' : '0'});
-						message = s.visibilitySaved;
-					}
-					if (licensing.kind === 'paid' && choices.some(({id}) => users.includes(id) !== !!licensing.administrators.find(admin => admin.id === id)?.shared)) {
-						await request('guest_key_license_share', {users: JSON.stringify(users)});
-						message = s.sharingSaved;
-					}
-					feedback.textContent = message;
-				} finally { syncChoices(); }
-			};
-			function scheduleSave() {
-				clearTimeout(saveTimer);
-				saveTimer = setTimeout(() => {
-					if (busy) { scheduleSave(); return; }
-					run(async () => {});
-				}, 1500);
-			}
-			licensing.administrators.forEach(admin => {
-				const row = document.createElement('div'); row.className = 'guest-key-admin-row';
-				row.setAttribute('role', 'radiogroup'); row.setAttribute('aria-label', admin.name);
-				const name = document.createElement('strong'); name.textContent = admin.name; row.append(name);
-				function choice(label, attribute) {
-					const field = document.createElement('label');
-					const input = document.createElement('input'); input.type = 'radio'; input.name = `guest-key-access-${admin.id}`; input.value = admin.id; input.setAttribute(attribute, '');
-					field.append(input, ' ', label); row.append(field); return input;
-				}
-				const share = choice(s.shareAccess, 'data-guest-key-share');
-				const hide = choice(s.hideToolbar, 'data-guest-key-hide');
-				share.addEventListener('change', () => { hide.checked = false; scheduleSave(); });
-				hide.addEventListener('change', () => { share.checked = false; scheduleSave(); });
-				choices.push({share, hide, id: admin.id}); sharing.append(row);
+		intro.remove();
+		const choices = [];
+		let timer, saving = false, transferButton;
+		function sync() {
+			if (transferButton) transferButton.disabled = saving;
+			choices.forEach(({id, enable, hide}) => {
+				const admin = access.administrators.find(admin => admin.id === id);
+				enable.checked = !!(admin?.installer || admin?.enabled); hide.checked = !enable.checked;
+				enable.disabled = hide.disabled = !access.canManageAccess || !!admin?.installer;
 			});
-			syncChoices(); licensePanel.append(sharing);
 		}
-		if (licensing?.legacyClaim) {
-			const explanation = document.createElement('p'); explanation.textContent = s.claimIntro; licensePanel.append(explanation);
-			action(s.claimExisting, async () => { await request('guest_key_license_claim_existing'); licenseNotice(); });
+		async function save() {
+			if (saving) return false;
+			saving = true;
+			if (transferButton) transferButton.disabled = true;
+			const changes = choices.filter(({id, enable}) => enable.checked !== !!access.administrators.find(admin => admin.id === id)?.enabled)
+				.map(({id, enable}) => ({id, enabled: enable.checked}))
+				.sort((a, b) => Number(a.id === access.userId) - Number(b.id === access.userId));
+			// Keep the focused radio in place while locking edits until the queue finishes.
+			accessSettings.setAttribute('aria-busy', 'true');
+			try {
+				for (const {id, enabled} of changes) {
+					await request('guest_key_set_access', {user: String(id), enabled: enabled ? '1' : '0'});
+					if (access.restricted || !access.canManageAccess) { clearTimeout(timer); location.reload(); return; }
+				}
+				feedback.textContent = s.accessSaved;
+				return true;
+			} catch (error) { feedback.textContent = error.message || s.error; return false; }
+			finally { saving = false; accessSettings.setAttribute('aria-busy', 'false'); sync(); }
 		}
-		const checkout = document.createElement('a'); checkout.textContent = licensing?.kind === 'paid' ? (licensing.ownActive ? s.manageBilling : s.renewLicense) : s.buyLicense;
-		checkout.href = licensing?.kind === 'paid' ? licensing.renew : licensing.checkout;
-		checkout.className = 'button';
-		checkout.setAttribute('aria-label', s.opensNewTab.replace('%s', checkout.textContent));
-		const icon = document.createElement('span'); icon.textContent = '↗'; icon.setAttribute('aria-hidden', 'true');
-		checkout.append(' ', icon);
-		checkout.target = '_blank'; checkout.rel = 'noopener noreferrer'; (licensing?.kind === 'paid' ? licenseActions : keyColumn).append(checkout);
-		if (licensing?.email && licensing?.kind === 'trial') {
-			const match = document.createElement('p'); match.textContent = s.automaticLicense.replace('%s', licensing.email); licensePanel.append(match);
+		function changed(enable, hide, enabled) {
+			if (saving) { sync(); return; }
+			enable.checked = enabled; hide.checked = !enabled;
+			clearTimeout(timer); timer = setTimeout(save, 1500);
 		}
-		positionStatus();
-		if (takeFocus) focus?.focus();
-	}
-
-	function requireLicense(message) {
-		licenseNotice(message);
-		if (licenseSettings) {
-			licenseSettings.scrollIntoView({block: 'center'});
-			status(message, true);
+		(access.administrators || []).forEach(admin => {
+			const row = document.createElement('div'); row.className = 'guest-key-admin-row';
+			row.setAttribute('role', 'radiogroup'); row.setAttribute('aria-label', admin.name);
+			const name = document.createElement('strong'); name.textContent = admin.name; row.append(name);
+			function choice(label, attribute) {
+				const field = document.createElement('label'); const input = document.createElement('input');
+				input.type = 'radio'; input.name = `guest-key-access-${admin.id}`; input.setAttribute(attribute, '');
+				field.append(input, ' ', label); row.append(field); return input;
+			}
+			const enable = choice(s.shareAccess, 'data-guest-key-enable'); const hide = choice(s.hideToolbar, 'data-guest-key-hide');
+			enable.addEventListener('change', () => changed(enable, hide, true)); hide.addEventListener('change', () => changed(enable, hide, false));
+			choices.push({id: admin.id, enable, hide}); accessSettings.append(row);
+		});
+		const candidates = (access.administrators || []).filter(admin => !admin.installer && admin.canOwn);
+		if (access.isInstaller && candidates.length) {
+			const form = document.createElement('form'); form.className = 'guest-key-owner-form';
+			const label = document.createElement('label'); label.textContent = s.owner; label.htmlFor = 'guest-key-owner';
+			const select = document.createElement('select'); select.id = 'guest-key-owner'; select.required = true;
+			const placeholder = document.createElement('option'); placeholder.value = ''; placeholder.textContent = s.selectAdministrator; select.append(placeholder);
+			candidates.forEach(admin => { const option = document.createElement('option'); option.value = String(admin.id); option.textContent = admin.name; select.append(option); });
+			transferButton = document.createElement('button'); transferButton.type = 'submit'; transferButton.className = 'button'; transferButton.textContent = s.changeOwner;
+			form.append(label, select, transferButton); accessSettings.append(form);
+			form.addEventListener('submit', async event => {
+				event.preventDefault(); if (saving || !select.value) return;
+				clearTimeout(timer);
+				if (!await save()) return;
+				saving = true; sync(); select.disabled = true;
+				try { await request('guest_key_change_owner', {user: select.value}); location.reload(); }
+				catch (error) { feedback.textContent = error.message || s.error; }
+				finally { saving = false; select.disabled = false; sync(); }
+			});
 		}
+		sync();
 	}
 
 	function setBusy(value) {
@@ -363,18 +269,6 @@
 	async function createAccess(event) {
 		event.preventDefault();
 		if (busy) return;
-		if (!licensing?.active) {
-			setBusy(true);
-			status(s.working);
-			try { await request('guest_key_license_status'); } catch { /* Manual entry remains available. */ }
-			setBusy(false);
-			if (!licensing?.active) {
-				const message = licensing?.kind === 'paid' ? (licensing.expired ? s.licenseExpired : s.licenseCheckNeeded)
-					: licensing?.expired ? (licensing.email ? s.trialExpiredEmail.replace('%s', licensing.email) : s.trialExpired)
-						: licensing?.pending ? s.codeSent.replace('%s', licensing.email) : s.licenseRequired;
-				requireLicense(message); return;
-			}
-		}
 		closeDialog();
 		setBusy(true);
 		status(s.creating);
@@ -404,8 +298,7 @@
 			if (!copied) fallback(data.bundle, data.expires);
 		} catch (error) {
 			setBusy(false);
-			if (error.licensing) requireLicense(error.message);
-			else status(error.message || s.error, true);
+			status(error.message || s.error, true);
 		}
 	}
 
@@ -447,8 +340,7 @@
 	toolbarLink?.setAttribute('aria-expanded', 'false');
 	toolbarLink?.addEventListener('click', createAccess);
 	toolbarRevoke?.querySelector('.ab-item')?.addEventListener('click', revokeAccess);
-	toolbarItem?.addEventListener('mouseenter', () => { if (notice) notice.hidden = true; refreshPurchase(); });
-	toolbarLink?.addEventListener('focus', refreshPurchase);
+	toolbarItem?.addEventListener('mouseenter', () => { if (notice) notice.hidden = true; });
 	toolbarLink?.addEventListener('keydown', event => {
 		if (event.key === 'ArrowDown') {
 			event.preventDefault();
@@ -458,26 +350,7 @@
 	});
 	window.addEventListener('resize', positionStatus);
 	window.addEventListener('scroll', positionStatus, {passive: true});
-	if (licenseSettings) licenseNotice('', false, false);
-	function refreshPurchase() {
-		if (purchaseCheck) return purchaseCheck;
-		if (busy || licensing?.restricted || licensing?.kind !== 'trial' || document.hidden || Date.now() - purchaseCheckedAt < 15000) return;
-		purchaseCheckedAt = Date.now();
-		purchaseCheck = (async () => {
-			try {
-				const wasActive = licensing.active;
-				await request('guest_key_license_status');
-				if (licensing.kind === 'paid' || wasActive !== licensing.active) {
-					if (!busy && licensePanel && !licensePanel.hidden) licenseNotice('', false, false);
-				}
-			} catch { /* Keep the saved trial and manual activation available during an outage. */ }
-		})().finally(() => { purchaseCheck = null; });
-		return purchaseCheck;
-	}
-	refreshPurchase();
-	setInterval(refreshPurchase, 60000);
-	document.addEventListener('visibilitychange', refreshPurchase);
-	window.addEventListener('focus', refreshPurchase);
+	if (accessSettings) renderAccess();
 	document.querySelectorAll('[data-guest-key-create]').forEach(button => button.addEventListener('click', createAccess));
 	document.querySelectorAll('[data-guest-key-revoke]').forEach(button => button.addEventListener('click', revokeAccess));
 	document.querySelectorAll('[data-guest-key-inspect]').forEach(button => button.addEventListener('click', inspectAbility));

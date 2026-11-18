@@ -1,10 +1,8 @@
 <?php
-require_once __DIR__ . '/user-license-fixture.php';
+require_once __DIR__ . '/user-access-fixture.php';
 /**
- * Local integration test. Install admin-fixture.php as a temporary MU plugin and
- * provide wp-content/uploads/guest-key-admin-test.zip with package-fixture.php
- * stored as guest-key-admin-test/guest-key-admin-test.php.
- * Run with wp --user=admin eval-file tests/admin-abilities.php. Remove the fixture/ZIP afterward.
+ * Local integration test. Install admin-fixture.php as a temporary MU plugin.
+ * Run with wp --user=admin eval-file tests/admin-abilities.php. Remove the fixture afterward.
  */
 if ( ! defined( 'WP_CLI' ) || ! WP_CLI || ! in_array( wp_get_environment_type(), array( 'local', 'development' ), true ) || ! Guest_Key_Access::administrator() || ! post_type_exists( 'guest_key_test' ) ) {
 	throw new RuntimeException( 'Use a local site, an administrator, and the admin fixture.' );
@@ -40,7 +38,7 @@ $http = static function ( $body, $credential, $session = '' ) use ( &$requests )
 };
 try {
 	wp_set_current_user( $uid );
-	$credential = guest_key_test_entitled_create( $uid );
+	$credential = guest_key_test_enabled_create( $uid );
 	if ( is_wp_error( $credential ) ) { throw new RuntimeException( $credential->get_error_message() ); }
 	$init = $http( array( 'jsonrpc' => '2.0', 'id' => 1, 'method' => 'initialize', 'params' => array( 'protocolVersion' => '2025-11-25', 'capabilities' => new stdClass(), 'clientInfo' => array( 'name' => 'Guest Key admin tests', 'version' => '1.0' ) ) ), $credential );
 	$session = $init['session'];
@@ -119,21 +117,16 @@ try {
 	$updates = $call( 'list-updates' );
 	$assert( ! is_wp_error( $updates ) && isset( $updates['plugins'], $updates['themes'], $updates['core'] ), 'Native update offers are discoverable' );
 	$assert( is_wp_error( $call( 'apply-update', array( 'type' => 'core', 'target' => 'wordpress' ) ) ), 'Core updates require an explicit version' );
-	$installed = $call( 'install-plugin', array( 'slug' => 'guest-key-admin-test' ) );
-	$assert( ! is_wp_error( $installed ) && file_exists( WP_PLUGIN_DIR . '/guest-key-admin-test/guest-key-admin-test.php' ) && ! is_plugin_active( 'guest-key-admin-test/guest-key-admin-test.php' ), 'Install a test ZIP through the native plugin installer' );
-	$activated = $call( 'activate-plugin', array( 'plugin' => 'guest-key-admin-test/guest-key-admin-test.php' ) );
-	wp_cache_delete( 'alloptions', 'options' );
-	$assert( ! is_wp_error( $activated ) && is_plugin_active( 'guest-key-admin-test/guest-key-admin-test.php' ), 'Activate an installed plugin through MCP' );
-	$command = array( 'command' => 'ability list', 'input' => array( 'search' => 'guest-key-test/installed' ) );
-	$next = $http( array( 'jsonrpc' => '2.0', 'id' => 3, 'method' => 'tools/call', 'params' => array( 'name' => 'guest-key-run', 'arguments' => array( 'commands' => array( $command ) ) ) ), $credential, $session );
-	$items = $next['body']['result']['structuredContent']['results'][0]['data']['items'] ?? array();
-	$assert( in_array( 'guest-key-test/installed', array_column( $items, 'name' ), true ), 'Newly activated plugin abilities are discoverable on the next MCP request' );
-	$assert( is_wp_error( $call( 'delete-plugin', array( 'plugin' => 'guest-key-admin-test/guest-key-admin-test' ) ) ), 'Active plugin deletion is rejected' );
-	$deactivated = $call( 'deactivate-plugin', array( 'plugin' => 'guest-key-admin-test/guest-key-admin-test' ) );
-	wp_cache_delete( 'alloptions', 'options' );
-	$assert( ! is_wp_error( $deactivated ) && ! is_plugin_active( 'guest-key-admin-test/guest-key-admin-test.php' ), 'Deactivate a plugin through MCP' );
-	$deleted = $call( 'delete-plugin', array( 'plugin' => 'guest-key-admin-test/guest-key-admin-test' ) );
-	$assert( ! is_wp_error( $deleted ) && ! file_exists( WP_PLUGIN_DIR . '/guest-key-admin-test' ), 'Delete an inactive test plugin through MCP' );
+	foreach ( array(
+		array( 'install-plugin', array( 'slug' => 'guest-key-admin-test' ) ),
+		array( 'activate-plugin', array( 'plugin' => 'guest-key-admin-test/guest-key-admin-test.php' ) ),
+		array( 'deactivate-plugin', array( 'plugin' => plugin_basename( GUEST_KEY_FILE ) ) ),
+		array( 'delete-plugin', array( 'plugin' => plugin_basename( GUEST_KEY_FILE ) ) ),
+	) as $operation ) {
+		$assert( is_wp_error( $call( $operation[0], $operation[1] ) ), 'Temporary MCP access cannot run ' . $operation[0] );
+	}
+	$assert( ! file_exists( WP_PLUGIN_DIR . '/guest-key-admin-test' ), 'Denied MCP package changes install no files' );
+
 	$deny = static function ( $caps ) { $caps['edit_posts'] = false; $caps['install_plugins'] = false; return $caps; };
 	add_filter( 'user_has_cap', $deny );
 	$assert( is_wp_error( wp_get_ability( 'guest-key/manage-content' )->execute( array( 'method' => 'POST', 'path' => '/wp/v2/posts', 'parameters' => array( 'title' => 'Must not be created' ) ) ) ), 'Native content permissions still apply to administrators with restricted caps' );

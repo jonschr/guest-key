@@ -3,7 +3,7 @@
  * Plugin Name: Guest Key
  * Plugin URI: https://elod.in
  * Description: One-click administrator access for your AI, lasting two hours by default, through native WordPress APIs, MCP, and temporary browser sessions.
- * Version: 0.2.13
+ * Version: 0.3.0
  * Author: Jon Schroeder
  * Author URI: https://elod.in
  * Update URI: https://github.com/jonschr/guest-key
@@ -15,7 +15,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'GUEST_KEY_VERSION', '0.2.13' );
+define( 'GUEST_KEY_VERSION', '0.3.0' );
 define( 'GUEST_KEY_FILE', __FILE__ );
 define( 'GUEST_KEY_DIR', __DIR__ );
 
@@ -33,7 +33,7 @@ $guest_key_update_checker = \YahnisElsts\PluginUpdateChecker\v5\PucFactory::buil
 
 require_once __DIR__ . '/includes/class-guest-key-dependency.php';
 require_once __DIR__ . '/includes/class-guest-key-access.php';
-require_once __DIR__ . '/includes/class-guest-key-license.php';
+require_once __DIR__ . '/includes/class-guest-key-site-access.php';
 require_once __DIR__ . '/includes/class-guest-key-browser.php';
 require_once __DIR__ . '/includes/class-guest-key-browser-sessions.php';
 require_once __DIR__ . '/includes/class-guest-key-abilities.php';
@@ -49,7 +49,7 @@ require_once __DIR__ . '/includes/class-guest-key-package-abilities.php';
 require_once __DIR__ . '/includes/class-guest-key-admin.php';
 
 Guest_Key_Access::init();
-Guest_Key_License::init();
+Guest_Key_Site_Access::init();
 Guest_Key_Browser::init();
 Guest_Key_Abilities::init();
 Guest_Key_Commands::init();
@@ -57,6 +57,6 @@ Guest_Key_Files::init();
 Guest_Key_Admin::init();
 Guest_Key_Dependency::init();
 
-register_activation_hook( __FILE__, array( 'Guest_Key_License', 'record_installation' ) );
+register_activation_hook( __FILE__, array( 'Guest_Key_Site_Access', 'activate' ) );
 register_activation_hook( __FILE__, array( 'Guest_Key_Dependency', 'activate' ) );
 register_deactivation_hook( __FILE__, array( 'Guest_Key_Access', 'deactivate' ) );
