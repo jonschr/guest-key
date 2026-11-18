@@ -1,5 +1,11 @@
 # Changes
 
+## 0.3.1 — 2026-11-18
+
+- Show Change owner first, then reveal the administrator dropdown with Confirm change and Cancel actions.
+- Align the ownership controls and preserve wrapping on narrow screens.
+- Restore focus and clear the selection when cancelling an ownership change.
+
 ## 0.3.0 — 2026-11-18
 
 - Make Guest Key free with local administrator authorization. Remove commercial licensing, trials, email verification, purchase matching and provider requests. Add no telemetry.

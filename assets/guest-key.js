@@ -162,13 +162,24 @@
 		});
 		const candidates = (access.administrators || []).filter(admin => !admin.installer && admin.canOwn);
 		if (access.isInstaller && candidates.length) {
-			const form = document.createElement('form'); form.className = 'guest-key-owner-form';
+			const controls = document.createElement('div'); controls.className = 'guest-key-owner-controls';
+			const open = document.createElement('button'); open.type = 'button'; open.className = 'button'; open.textContent = s.changeOwner;
+			open.setAttribute('aria-expanded', 'false'); open.setAttribute('aria-controls', 'guest-key-owner-form');
+			const form = document.createElement('form'); form.className = 'guest-key-owner-form'; form.id = 'guest-key-owner-form'; form.hidden = true;
 			const label = document.createElement('label'); label.textContent = s.owner; label.htmlFor = 'guest-key-owner';
 			const select = document.createElement('select'); select.id = 'guest-key-owner'; select.required = true;
 			const placeholder = document.createElement('option'); placeholder.value = ''; placeholder.textContent = s.selectAdministrator; select.append(placeholder);
 			candidates.forEach(admin => { const option = document.createElement('option'); option.value = String(admin.id); option.textContent = admin.name; select.append(option); });
-			transferButton = document.createElement('button'); transferButton.type = 'submit'; transferButton.className = 'button'; transferButton.textContent = s.changeOwner;
-			form.append(label, select, transferButton); accessSettings.append(form);
+			transferButton = document.createElement('button'); transferButton.type = 'submit'; transferButton.className = 'button button-primary'; transferButton.textContent = s.confirmOwner;
+			const cancel = document.createElement('button'); cancel.type = 'button'; cancel.className = 'button'; cancel.textContent = s.cancel;
+			open.addEventListener('click', () => {
+				open.hidden = true; open.setAttribute('aria-expanded', 'true'); form.hidden = false; select.focus();
+			});
+			cancel.addEventListener('click', () => {
+				if (saving) return;
+				select.value = ''; form.hidden = true; open.hidden = false; open.setAttribute('aria-expanded', 'false'); open.focus();
+			});
+			form.append(label, select, transferButton, cancel); controls.append(open, form); accessSettings.append(controls);
 			form.addEventListener('submit', async event => {
 				event.preventDefault(); if (saving || !select.value) return;
 				clearTimeout(timer);

@@ -75,6 +75,8 @@
 .guest-key-admin-row { display: grid; grid-template-columns: minmax(100px, 1fr) auto auto; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid #dcdcde; }
 @media (max-width: 782px) { .guest-key-admin-row { grid-template-columns: 1fr; gap: 8px; } }
 
-.guest-key-owner-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 20px; }
+.guest-key-owner-controls { margin-top: 20px; }
+.guest-key-owner-controls .button { margin: 0; }
+.guest-key-owner-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .guest-key-owner-form label { font-weight: 600; }
 .guest-key-owner-form select { max-width: 100%; }

@@ -125,6 +125,8 @@ final class Guest_Key_Admin {
 				'shareAccess' => __( 'Enable Guest Key', 'guest-key' ),
 				'hideToolbar' => __( 'Hide Guest Key', 'guest-key' ),
 				'changeOwner' => __( 'Change owner', 'guest-key' ),
+				'confirmOwner' => __( 'Confirm change', 'guest-key' ),
+				'cancel' => __( 'Cancel', 'guest-key' ),
 				'owner' => __( 'New owner', 'guest-key' ),
 				'selectAdministrator' => __( 'Select administrator', 'guest-key' ),
 				'accessSaved' => __( 'Administrator access saved.', 'guest-key' ),

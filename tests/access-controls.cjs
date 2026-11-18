@@ -44,7 +44,7 @@ function browser(state = enabled, hidden = false, settings = false, clipboard = 
   guestKey: { strings: { durationHour: '%s hour', durationHours: '%s hours', durationMinute: '%s minute', durationMinutes: '%s minutes', expires: 'Access expires at %s.', expiresTomorrow: 'Access expires tomorrow at %s.', expiresDay: 'Access expires %s.',
    accessTitle: 'Administrator access', accessNotEnabled: 'Guest Key access is not currently enabled for your account.',
    accessContact: 'Contact installer at %s.', accessContactFallback: 'Contact installer.',
-   owner: 'Owner', changeOwner: 'Change owner', selectAdministrator: 'Select administrator', shareAccess: 'Enable Guest Key', hideToolbar: 'Hide Guest Key',
+   owner: 'New owner', changeOwner: 'Change owner', confirmOwner: 'Confirm change', cancel: 'Cancel', selectAdministrator: 'Select administrator', shareAccess: 'Enable Guest Key', hideToolbar: 'Hide Guest Key',
    claimControl: 'Set up Guest Key', accessSaved: 'Access saved.',
    diagnosticsCopied: 'Diagnostics copied.', diagnosticsSelect: 'Select and copy diagnostics.', error: 'Could not prepare access.'
   }, access: state, settingsUrl: '/settings', ajaxUrl: '/ajax' },
@@ -172,10 +172,26 @@ test('creating a connection sends create directly without access preflight', asy
 });
 
 
+test('Change owner reveals the form and Cancel clears it and restores focus without requests', () => {
+ const own = {...accessView, isInstaller: true, administrators: admins.map(a => ({...a, canOwn: true}))};
+ const b = browser(own, false, true), form = b.panel.querySelectorAll('form')[0];
+ const open = b.panel.querySelectorAll('button').find(button => button.textContent === 'Change owner');
+ const dropdown = form.querySelectorAll('select')[0], cancel = form.querySelectorAll('button')[1];
+ assert.equal(form.hidden, true); assert.equal(open.attributes['aria-expanded'], 'false');
+ open.events.click();
+ assert.equal(form.hidden, false); assert.equal(open.hidden, true);
+ assert.equal(open.attributes['aria-expanded'], 'true'); assert.equal(b.document.activeElement, dropdown);
+ dropdown.value = '2'; cancel.events.click();
+ assert.equal(form.hidden, true); assert.equal(open.hidden, false); assert.equal(dropdown.value, '');
+ assert.equal(open.attributes['aria-expanded'], 'false'); assert.equal(b.document.activeElement, open);
+ assert.equal(b.requests.length, 0);
+});
+
 test('only the owner sees Change owner and pending access edits finish first', async () => {
  const own = {...accessView, userId: 1, isInstaller: true, administrators: admins.map(a => ({...a, canOwn: true}))};
  const b = browser(own, false, true), form = b.panel.querySelectorAll('form')[0];
- assert.ok(form); const selectOwner = form.querySelectorAll('select')[0]; selectOwner.value = '2';
+ assert.ok(form); b.panel.querySelectorAll('button').find(button => button.textContent === 'Change owner').events.click();
+ const selectOwner = form.querySelectorAll('select')[0]; selectOwner.value = '2';
  select(radios(b)[2]);
  const submit = form.events.submit({preventDefault() {}});
  assert.equal(b.requests[0].action, 'guest_key_set_access');
