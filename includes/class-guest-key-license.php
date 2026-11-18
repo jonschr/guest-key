@@ -5,6 +5,8 @@ final class Guest_Key_License {
 
 	const OPTION = 'guest_key_license';
 	const PENDING = 'guest_key_trial_pending';
+	const SHARING = 'guest_key_shared_users';
+	const CONTACTS = 'guest_key_license_contacts';
 	const HIDDEN = 'guest_key_hidden_toolbar_users';
 	const CHECKOUT = 'https://elodin.lemonsqueezy.com/checkout/buy/40b6382a-e891-418c-bf00-69512a7243dd';
 	const RENEW = 'https://app.lemonsqueezy.com/my-orders';
@@ -73,12 +75,52 @@ final class Guest_Key_License {
 		return $until > time() ? $until : 0;
 	}
 
+	public static function owns_paid( $user_id ) {
+		$saved = self::record( $user_id );
+		return 'paid' === ( $saved['kind'] ?? '' ) && ( $saved['site'] ?? '' ) === self::site();
+	}
+
+	private static function shared_users( $saved ) {
+		$users = get_option( self::SHARING, null );
+		return is_array( $users ) ? $users : ( $saved['shared_users'] ?? array() );
+	}
+
+	private static function access_list() {
+		$users = get_option( self::SHARING, null );
+		if ( is_array( $users ) ) { return $users; }
+		$users = array();
+		foreach ( self::owners() as $owner_id ) {
+			if ( self::admin_role( $owner_id ) && self::owns_paid( $owner_id ) ) {
+				$users = array_merge( $users, self::record( $owner_id )['shared_users'] ?? array() );
+			}
+		}
+		return array_values( array_unique( $users ) );
+	}
+
+	private static function remember_contact( $users ) {
+		$contacts = (array) get_option( self::CONTACTS, array() );
+		foreach ( $users as $id ) { $contacts[ $id ] = get_current_user_id(); }
+		update_option( self::CONTACTS, $contacts, false );
+	}
+
+	public static function contact_email( $user_id ) {
+		$contacts = (array) get_option( self::CONTACTS, array() );
+		$candidates = array_merge( array( (int) ( $contacts[ $user_id ] ?? 0 ) ), self::owners() );
+		foreach ( array_unique( $candidates ) as $owner_id ) {
+			if ( $owner_id && $owner_id !== (int) $user_id && self::admin_role( $owner_id ) && self::owns_paid( $owner_id ) ) {
+				$owner = get_userdata( $owner_id );
+				if ( $owner && is_email( $owner->user_email ) ) { return $owner->user_email; }
+			}
+		}
+		return '';
+	}
+
 	private static function sources( $user_id ) {
 		$result = array();
 		foreach ( array_unique( array_merge( array( (int) $user_id ), self::owners() ) ) as $owner_id ) {
 			if ( ! $owner_id || ( $owner_id !== (int) $user_id && ! self::admin_role( $owner_id ) ) ) { continue; }
 			$saved = self::record( $owner_id );
-			if ( $owner_id === (int) $user_id || ( ! self::toolbar_hidden( $user_id ) && 'paid' === ( $saved['kind'] ?? '' ) && in_array( (int) $user_id, $saved['shared_users'] ?? array(), true ) ) ) {
+			if ( $owner_id === (int) $user_id || ( ! self::toolbar_hidden( $user_id ) && 'paid' === ( $saved['kind'] ?? '' ) && in_array( (int) $user_id, self::shared_users( $saved ), true ) ) ) {
 				$result[ $owner_id ] = $saved;
 			}
 		}
@@ -88,6 +130,7 @@ final class Guest_Key_License {
 	/** No network or current-user lookup when an explicit ID is provided during authentication. */
 	public static function active_until( $user_id = null ) {
 		$user_id = null === $user_id ? get_current_user_id() : (int) $user_id;
+		if ( self::toolbar_hidden( $user_id ) ) { return 0; }
 		$until = 0;
 		foreach ( self::sources( $user_id ) as $saved ) { $until = max( $until, self::own_until( $saved ) ); }
 		return $until;
@@ -108,13 +151,17 @@ final class Guest_Key_License {
 				if ( $owner ) { $shared[] = $owner->display_name; }
 			}
 		}
+		$access_list = self::access_list();
 		$administrators = array();
-		if ( Guest_Key_Access::administrator() && ! Guest_Key_Browser::is_guest_session() ) {
+		$restricted = self::toolbar_hidden( $user_id );
+		if ( ! $restricted && Guest_Key_Access::administrator() && ! Guest_Key_Browser::is_guest_session() ) {
 			foreach ( get_users( array( 'role' => 'administrator', 'blog_id' => get_current_blog_id() ) ) as $admin ) {
-				if ( (int) $admin->ID !== $user_id ) { $administrators[] = array( 'id' => (int) $admin->ID, 'name' => $admin->display_name, 'hidden' => self::toolbar_hidden( $admin->ID ), 'shared' => ! self::toolbar_hidden( $admin->ID ) && in_array( (int) $admin->ID, $saved['shared_users'] ?? array(), true ) ); }
+				if ( (int) $admin->ID !== $user_id ) { $administrators[] = array( 'id' => (int) $admin->ID, 'name' => $admin->display_name, 'ownsLicense' => self::owns_paid( $admin->ID ), 'hidden' => self::toolbar_hidden( $admin->ID ), 'shared' => self::owns_paid( $admin->ID ) || ( ! self::toolbar_hidden( $admin->ID ) && in_array( (int) $admin->ID, $access_list, true ) ) ); }
 			}
 		}
 		return array(
+			'restricted' => $restricted, 'contactEmail' => $restricted ? self::contact_email( $user_id ) : '',
+			'canManageAccess' => ! $restricted && self::owns_paid( $user_id ),
 			'active' => (bool) self::active_until( $user_id ), 'ownActive' => (bool) $own_active,
 			'kind' => $bound ? ( $saved['kind'] ?? '' ) : ( $shared ? 'shared' : '' ),
 			'expired' => $bound && ( ! empty( $saved['expires'] ) && $saved['expires'] <= time() || 'expired' === ( $saved['status'] ?? '' ) ),
@@ -161,7 +208,7 @@ final class Guest_Key_License {
 	}
 
 	public static function claim_existing() {
-		if ( ! Guest_Key_Access::administrator() || Guest_Key_Browser::is_guest_session() ) { return new WP_Error( 'guest_key_forbidden', __( 'Use a normal administrator session to manage licensing.', 'guest-key' ) ); }
+		if ( ! Guest_Key_Access::administrator() || Guest_Key_Browser::is_guest_session() || self::toolbar_hidden( get_current_user_id() ) ) { return new WP_Error( 'guest_key_forbidden', __( 'Use a normal administrator session to manage licensing.', 'guest-key' ) ); }
 		return self::serialized( static function () { return self::do_claim_existing(); } );
 	}
 
@@ -178,20 +225,24 @@ final class Guest_Key_License {
 	}
 
 	public static function toolbar_hidden( $user_id ) {
-		return in_array( (int) $user_id, (array) get_option( self::HIDDEN, array() ), true );
+		return ! self::owns_paid( $user_id ) && in_array( (int) $user_id, (array) get_option( self::HIDDEN, array() ), true );
 	}
 
 	public static function set_toolbar_hidden( $user_id, $hidden ) {
-		if ( ! Guest_Key_Access::administrator() || Guest_Key_Browser::is_guest_session() ) { return new WP_Error( 'guest_key_forbidden', __( 'Use a normal administrator session to manage visibility.', 'guest-key' ) ); }
+		if ( ! Guest_Key_Access::administrator() || Guest_Key_Browser::is_guest_session() || ! self::owns_paid( get_current_user_id() ) ) { return new WP_Error( 'guest_key_forbidden', __( 'Use a licensed administrator’s normal session to manage visibility.', 'guest-key' ) ); }
 		return self::serialized( static function () use ( $user_id, $hidden ) {
 			if ( ! is_int( $user_id ) || ! is_bool( $hidden ) || $user_id === get_current_user_id() || ! self::admin_role( $user_id ) ) {
 				return new WP_Error( 'guest_key_visibility', __( 'Select another administrator on this site.', 'guest-key' ) );
 			}
+			if ( $hidden && self::owns_paid( $user_id ) ) { return new WP_Error( 'guest_key_visibility', __( 'Administrators with their own purchased license always retain Guest Key access.', 'guest-key' ) ); }
 			$ids = array_values( array_diff( (array) get_option( self::HIDDEN, array() ), array( $user_id ) ) );
 			if ( $hidden ) { $ids[] = $user_id; }
 			update_option( self::HIDDEN, $ids, false );
 			if ( self::toolbar_hidden( $user_id ) !== $hidden ) { return new WP_Error( 'guest_key_visibility', __( 'Could not save toolbar visibility. Please retry.', 'guest-key' ) ); }
+			self::remember_contact( array( $user_id ) );
 			if ( $hidden ) {
+				$shared = get_option( self::SHARING, null );
+				if ( is_array( $shared ) ) { update_option( self::SHARING, array_values( array_diff( $shared, array( $user_id ) ) ), false ); }
 				foreach ( self::owners() as $owner_id ) {
 					$saved = self::record( $owner_id );
 					if ( in_array( $user_id, $saved['shared_users'] ?? array(), true ) ) {
@@ -213,8 +264,11 @@ final class Guest_Key_License {
 			if ( self::toolbar_hidden( $id ) ) { return new WP_Error( 'guest_key_license_share', __( 'Show Guest Key in this administrator’s toolbar before sharing access.', 'guest-key' ) ); }
 			if ( $id !== get_current_user_id() ) { $ids[] = $id; }
 		}
-		$saved['shared_users'] = array_values( array_unique( $ids ) );
-		self::save( $saved );
+		$previous = self::access_list();
+		$ids = array_values( array_unique( $ids ) );
+		update_option( self::SHARING, $ids, false );
+		if ( get_option( self::SHARING ) !== $ids ) { return new WP_Error( 'guest_key_license_share', __( 'Could not save shared access. Please retry.', 'guest-key' ) ); }
+		self::remember_contact( array_unique( array_merge( $previous, $ids ) ) );
 		return true;
 	}
 
@@ -325,6 +379,7 @@ final class Guest_Key_License {
 
 	public static function require_access( $user_id = null ) {
 		$user_id = null === $user_id ? get_current_user_id() : (int) $user_id;
+		if ( self::toolbar_hidden( $user_id ) ) { return new WP_Error( 'guest_key_license_required', __( 'Guest Key access is not currently enabled for your account. Contact your administrator or activate your own purchased license.', 'guest-key' ) ); }
 		$result = false;
 		foreach ( self::sources( $user_id ) as $owner_id => $source ) { $result = self::check( false, $owner_id ); }
 		if ( self::active_until( $user_id ) ) { return true; }
@@ -332,7 +387,7 @@ final class Guest_Key_License {
 	}
 
 	public static function email( $email, $fresh = false ) {
-		if ( ! Guest_Key_Access::administrator() || Guest_Key_Browser::is_guest_session() ) { return new WP_Error( 'guest_key_forbidden', __( 'Use a normal administrator session to manage licensing.', 'guest-key' ) ); }
+		if ( ! Guest_Key_Access::administrator() || Guest_Key_Browser::is_guest_session() || self::toolbar_hidden( get_current_user_id() ) ) { return new WP_Error( 'guest_key_forbidden', __( 'Use a normal administrator session to manage licensing.', 'guest-key' ) ); }
 		return self::serialized( static function () use ( $email, $fresh ) { return self::do_email( $email, $fresh ); } );
 	}
 
@@ -364,7 +419,7 @@ final class Guest_Key_License {
 	}
 
 	public static function verify( $code ) {
-		if ( ! Guest_Key_Access::administrator() || Guest_Key_Browser::is_guest_session() ) { return new WP_Error( 'guest_key_forbidden', __( 'Use a normal administrator session to manage licensing.', 'guest-key' ) ); }
+		if ( ! Guest_Key_Access::administrator() || Guest_Key_Browser::is_guest_session() || self::toolbar_hidden( get_current_user_id() ) ) { return new WP_Error( 'guest_key_forbidden', __( 'Use a normal administrator session to manage licensing.', 'guest-key' ) ); }
 		return self::serialized( static function () use ( $code ) { return self::do_verify( $code ); } );
 	}
 

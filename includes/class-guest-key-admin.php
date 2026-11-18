@@ -112,22 +112,26 @@ final class Guest_Key_Admin {
 				'error' => __( 'Could not prepare access. Please retry.', 'guest-key' ),
 				'revoked' => __( 'Your Guest Key access has been revoked.', 'guest-key' ),
 				'copy' => __( 'Copy connection details', 'guest-key' ), 'close' => __( 'Close', 'guest-key' ),
-				'revoke' => __( 'Revoke now', 'guest-key' ), 'title' => __( 'Guest Key access', 'guest-key' ),
+				'title' => __( 'Guest Key access', 'guest-key' ),
 				'mcpUnavailable' => __( 'MCP unavailable; REST and browser access are ready.', 'guest-key' ),
 				'manualCopy' => __( 'Select and copy these connection details using your browser’s Copy command.', 'guest-key' ),
 				'diagnosticsCopied' => __( 'Diagnostics copied. Share this report with support.', 'guest-key' ),
 				'diagnosticsSelect' => __( 'Diagnostics are selected. Use your browser’s Copy command.', 'guest-key' ),
-				'licenseSettings' => __( 'License', 'guest-key' ), 'settings' => __( 'Guest Key settings', 'guest-key' ),
+				'licenseSettings' => __( 'License', 'guest-key' ),
 				'trialTitle' => __( 'Free trial', 'guest-key' ), 'manageBilling' => __( 'Manage billing', 'guest-key' ),
 				'automaticLicense' => __( 'Purchasing with %s? Your license will connect automatically.', 'guest-key' ),
 				'sharedAccess' => __( 'Access is shared with you by %s.', 'guest-key' ),
-				'shareLicense' => __( 'Share your license', 'guest-key' ),
+				'shareLicense' => __( 'Administrator access', 'guest-key' ),
 				'administrators' => __( 'Administrators', 'guest-key' ),
-				'shareAccess' => __( 'Share my license', 'guest-key' ),
-				'hideToolbar' => __( 'Hide from toolbar', 'guest-key' ),
-				'visibilityIntro' => __( 'Hiding Guest Key removes shared access on this site. Settings and individually owned licenses remain available.', 'guest-key' ),
+				'accessNotEnabled' => __( 'Guest Key access is not currently enabled for your account.', 'guest-key' ),
+				'accessContact' => __( 'To request access, contact your administrator at %s.', 'guest-key' ),
+				'accessContactFallback' => __( 'To request access, contact a site administrator.', 'guest-key' ),
+				'accessPurchase' => __( 'You can also purchase your own license or enter an existing license key below to manage Guest Key with the other license owners on this site.', 'guest-key' ),
+				'purchaseLicense' => __( 'Purchase your own license', 'guest-key' ),
+				'shareAccess' => __( 'Enable shared access', 'guest-key' ),
+				'hideToolbar' => __( 'Hide Guest Key', 'guest-key' ),
+				'visibilityIntro' => __( 'Choose shared access or hide Guest Key for each administrator. License owners always retain access. The last saved selection applies.', 'guest-key' ),
 				'visibilitySaved' => __( 'Toolbar visibility updated.', 'guest-key' ),
-				'shareIntro' => __( 'Your license covers only your account unless you select other administrators below.', 'guest-key' ),
 				'sharingSaved' => __( 'License sharing updated.', 'guest-key' ),
 				'opensNewTab' => __( '%s (opens in a new tab)', 'guest-key' ),
 				'claimExisting' => __( 'Claim existing license or trial', 'guest-key' ),
@@ -148,7 +152,7 @@ final class Guest_Key_Admin {
 				'licenseKey' => __( 'License key', 'guest-key' ), 'activateLicense' => __( 'Activate license', 'guest-key' ),
 				'buyLicense' => __( 'Get a license key', 'guest-key' ), 'renewLicense' => __( 'Renew license', 'guest-key' ),
 				'checkLicense' => __( 'Check again', 'guest-key' ), 'removeLicense' => __( 'Remove my license', 'guest-key' ),
-				'continueConnect' => __( 'Connect agent', 'guest-key' ), 'working' => __( 'Working…', 'guest-key' ),
+				'working' => __( 'Working…', 'guest-key' ),
 			),
 		) );
 	}
@@ -164,7 +168,7 @@ final class Guest_Key_Admin {
 	}
 
 	public static function diagnostics() {
-		if ( ! Guest_Key_Access::administrator() ) {
+		if ( ! Guest_Key_Access::administrator() || Guest_Key_License::toolbar_hidden( get_current_user_id() ) ) {
 			return new WP_Error( 'guest_key_forbidden', __( 'Administrator access is required.', 'guest-key' ) );
 		}
 		require_once ABSPATH . 'wp-admin/includes/plugin.php';
@@ -204,6 +208,22 @@ final class Guest_Key_Admin {
 			wp_die( esc_html__( 'Administrator access is required.', 'guest-key' ) );
 		}
 		$license = Guest_Key_License::view();
+		if ( $license['restricted'] ) {
+			?>
+			<div class="wrap guest-key-page">
+				<h1><?php esc_html_e( 'Guest Key', 'guest-key' ); ?></h1>
+				<section class="guest-key-card" id="guest-key-license-settings" aria-labelledby="guest-key-license-settings-title">
+					<div data-guest-key-license-settings>
+						<h2 id="guest-key-license-settings-title"><?php esc_html_e( 'Guest Key access is not currently enabled for your account.', 'guest-key' ); ?></h2>
+						<p><?php echo esc_html( $license['contactEmail'] ? sprintf( __( 'To request access, contact your administrator at %s.', 'guest-key' ), $license['contactEmail'] ) : __( 'To request access, contact a site administrator.', 'guest-key' ) ); ?></p>
+						<p><a href="<?php echo esc_url( $license['checkout'] ); ?>"><?php esc_html_e( 'Purchase your own license', 'guest-key' ); ?></a></p>
+						<noscript><p><?php esc_html_e( 'Enable JavaScript to enter and activate your license key.', 'guest-key' ); ?></p></noscript>
+					</div>
+				</section>
+			</div>
+			<?php
+			return;
+		}
 		$rows = Guest_Key_Abilities::inventory();
 		$discovery = Guest_Key_Discovery::inventory();
 		$grant = Guest_Key_Access::grant( get_current_user_id() );

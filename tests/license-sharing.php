@@ -8,6 +8,7 @@ $original_user = get_current_user_id();
 $legacy = get_option( Guest_Key_License::OPTION, null );
 $legacy_pending = get_option( Guest_Key_License::PENDING, null );
 $dependency_error = get_option( 'guest_key_dependency_error', null );
+$site_options = array(); foreach (array(Guest_Key_License::SHARING, Guest_Key_License::CONTACTS) as $name) { $site_options[$name]=get_option($name,null); delete_option($name); }
 $users = array(); $checks = 0; $calls = array(); $migration_email = ''; $purchases = array();
 $assert = static function ( $ok, $message ) use ( &$checks ) { if ( ! $ok ) { throw new RuntimeException( $message ); } $checks++; echo "PASS: {$message}\n"; };
 $mock = static function ( $pre, $args, $url ) use ( &$calls, &$migration_email, &$purchases ) {
@@ -40,6 +41,12 @@ try {
 	Guest_Key_Access::revoke( $a );
 	wp_set_current_user( $b );
 	$assert( true === Guest_Key_License::activate( 'fixture-owner-b' ) && Guest_Key_License::active_until( $a ) && Guest_Key_License::active_until( $b ), 'Two separate licenses coexist on one site' );
+	foreach ( array( $a => $c, $b => $d ) as $owner_id => $recipient ) {
+		$legacy_share = get_option( Guest_Key_License::option_name( $owner_id ) ); $legacy_share['shared_users'] = array( $recipient );
+		update_option( Guest_Key_License::option_name( $owner_id ), $legacy_share, false );
+	}
+	$assert( Guest_Key_License::active_until( $c ) && Guest_Key_License::active_until( $d ), 'Legacy per-owner sharing remains intact before the first site-wide save' );
+	foreach ( array( $a, $b ) as $owner_id ) { $legacy_share = get_option( Guest_Key_License::option_name( $owner_id ) ); $legacy_share['shared_users'] = array(); update_option( Guest_Key_License::option_name( $owner_id ), $legacy_share, false ); }
 	$n = count( $calls ); wp_set_current_user( $c );
 	$assert( is_wp_error( Guest_Key_License::activate( 'fixture-owner-a' ) ) && count( $calls ) === $n, 'Entering another owner’s key cannot consume a duplicate provider activation' );
 	$bar = new WP_Admin_Bar(); Guest_Key_Admin::toolbar( $bar );
@@ -65,8 +72,8 @@ try {
 	$assert( 200 === $rest(), 'Native REST authenticates the credential using the issuing user’s shared entitlement' );
 
 	wp_set_current_user( $a ); Guest_Key_License::share( array() );
-	$assert( (bool) Guest_Key_License::active_until( $c ), 'Removing one share preserves access through the other owner' );
-	$assert( 200 === $rest(), 'The existing REST credential remains valid while another share covers it' );
+	$assert( ! Guest_Key_License::active_until( $c ), 'An owner’s last saved selection replaces the shared site access list' );
+	$assert( 401 === $rest(), 'Either owner can immediately end existing shared REST access' );
 	wp_set_current_user( $b ); Guest_Key_License::share( array() );
 	$assert( ! Guest_Key_License::active_until( $c ) && Guest_Key_License::active_until( $a ), 'Removing the last share ends only that recipient’s entitlement' );
 	$assert( 401 === $rest(), 'Removing the last share immediately blocks an already-issued REST credential' );
@@ -91,7 +98,7 @@ try {
 	$n = count( $calls ); Guest_Key_License::active_until( $c );
 	$assert( count( $calls ) === $n, 'Reading a recipient’s entitlement performs no provider requests' );
 	get_userdata( $a )->set_role( 'subscriber' );
-	$assert( ! Guest_Key_License::active_until( $c ), 'A demoted owner cannot continue sharing administrator access' );
+	$assert( Guest_Key_License::active_until( $c ), 'A remaining licensed administrator continues covering the shared site access list' );
 	get_userdata( $a )->set_role( 'administrator' );
 	// Existing site-wide trial matches its verified email; no token or expiry is changed.
 	delete_option( Guest_Key_License::option_name( $b ) ); update_option( Guest_Key_License::OPTION, $trial, false );
@@ -110,6 +117,7 @@ try {
 	wp_set_current_user( $original_user );
 } finally {
 	wp_set_current_user( $original_user );
+	foreach ( $site_options as $name => $value ) { if ( null === $value ) { delete_option( $name ); } else { update_option( $name, $value, false ); } }
 	foreach ( $users as $id ) { Guest_Key_Access::revoke( $id ); delete_option( Guest_Key_License::option_name( $id ) ); delete_option( Guest_Key_License::pending_name( $id ) ); wp_delete_user( $id ); }
 	foreach ( array( Guest_Key_License::OPTION => $legacy, Guest_Key_License::PENDING => $legacy_pending ) as $name => $value ) { if ( null === $value ) { delete_option( $name ); } else { update_option( $name, $value, false ); } }
 	if ( null === $dependency_error ) { delete_option( 'guest_key_dependency_error' ); } else { update_option( 'guest_key_dependency_error', $dependency_error, false ); }

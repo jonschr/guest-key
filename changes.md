@@ -1,5 +1,13 @@
 # Changes
 
+## 0.2.11 — 2026-11-17
+
+- Give hidden administrators a contact, purchase and own-license activation page. Purchased-license owners always retain the toolbar and full settings.
+- Let license owners manage one shared access list for other administrators; the last saved selection applies. Preserve legacy sharing until the first save.
+- Use mutually exclusive shared-access and hide options with a 1.5-second save debounce.
+- Recommend the optional Block Runner skill for Gutenberg work, with guidance for agents without skills or local tooling.
+- Refresh the README around fast, temporary WordPress access; sanitize public QA notes and remove unused UI strings.
+
 ## 0.2.10 — 2026-11-17
 
 - Debounce toolbar visibility and license-sharing changes for 500 milliseconds, saving the final selections together and avoiding requests when changes are reversed.

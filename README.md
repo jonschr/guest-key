@@ -1,8 +1,34 @@
 # Guest Key
 
-One-click, temporary access for AI agents working on live WordPress sites. Credentials expire after two hours by default and can be revoked sooner. AI task traffic travels directly between your agent and your website.
+Get your AI agent working on your WordPress site in one click. Guest Key gives it temporary access to edit content, manage media, and handle site administration without sharing your WordPress password.
 
-Connect through authenticated REST commands, an optional MCP endpoint, or temporary WordPress browser sign-in.
+[Download Guest Key](https://github.com/jonschr/guest-key/releases/latest/download/guest-key.zip)
+
+## Connect in one click
+
+Click **Copy Guest Key**, paste the connection details into your AI agent, and get to work. Your agent can connect through native WordPress REST commands, an optional MCP endpoint, or a temporary browser sign-in. Use an agent that supports one of those methods; no particular AI provider or app is required.
+
+AI task traffic travels directly between your agent and your website.
+
+## Give access a clear finish line
+
+Guest Keys expire after two hours by default. Choose a duration from 30 minutes to 24 hours, or revoke access sooner. Creating a new key replaces the previous one, and access cannot outlast the account’s trial or license entitlement.
+
+Expiration stops future requests. It does not undo changes already made to the site.
+
+## WordPress workflows, without cowboy coding
+
+Guest Key helps your agent do the work you would do through WordPress: update a page, upload an image, change a supported setting, or install an update. It works through native APIs, registered abilities, and the WordPress interface, following the issuing administrator’s permissions and the plugin’s access restrictions.
+
+There is no direct file-writing tool, shell, or SQL console. Your agent can inspect source files to understand the site, then use supported WordPress operations to make changes. Build new websites and custom code locally.
+
+This is administrator access, so it can make meaningful changes. Native plugin and theme installation remains available and can run third-party code; Guest Key does not sandbox installed plugins.
+
+## Choose who can use it
+
+Licenses and verified trials belong to the administrator who activates them. License owners can enable shared access for other administrators on the same site. When several owners manage access, the last saved selection applies; each owner keeps control of their own license and always retains Guest Key access.
+
+Hidden administrators see a contact, purchase, and license-entry page. Activating their own purchased license gives them full controls alongside the other owners. An administrator needs their own entitlement or shared access before Guest Key will issue a credential.
 
 ## Tools
 
@@ -22,20 +48,23 @@ Connect through authenticated REST commands, an optional MCP endpoint, or tempor
 | `rest request`, `ability` | Discover and call core/plugin routes and registered abilities |
 | `design guide` | Focused WordPress design guidance |
 
+## Get started
+
+Requires WordPress 6.9+, PHP 7.4+, HTTPS, and administrator application passwords. New verified trials last three days.
+
+Install and activate Guest Key, open its settings, and verify your email for a trial or enter your license key. Then click **Copy Guest Key** and paste it into your AI agent.
+
+Guest Key installs the optional official MCP Adapter through WordPress’s native installer. If automatic installation is blocked, install and activate MCP Adapter from Plugins → Add New, then retry. Native REST commands and temporary browser sign-in remain available without MCP.
+
+<details>
+<summary>Developer reference and access boundaries</summary>
+
 `GET /wp-json/guest-key/v1/help` provides command names and input schemas. `POST /wp-json/guest-key/v1/run` runs up to 20 commands sequentially, stopping on failure. MCP exposes the same interface through `guest-key-help` and `guest-key-run`.
 
 File scans return `next_cursor` after result, byte, entry, or time limits: repeat the same filters with `cursor` until it is `null`. `depth: 1` inspects immediate children; `depth: 2` includes the next level. Paths are relative to `wp-content`. Check each page’s skipped-file counts. Use small `limit`/`length` values and separate large reads to fit client output limits; never retry writes blindly after a clipped response. Exact argument names and pagination conventions are included in command help.
-
-Licenses and verified trials belong to the administrator who activates them. A license owner can share access with selected administrators on that site; multiple owners and overlapping shares are supported. Other administrators can see Guest Key but need their own entitlement or shared access to create a key. Existing license products and site limits are unchanged.
 
 Permission to edit a post grants read access to all its stored metadata and permits custom-field writes, including unregistered underscore (`_`) keys. Registered/native field authorization, readonly schemas, validation, and sanitization still apply to writes. Missing keys remain distinct from empty values. REST, MCP, Abilities, and combined `post save` share this policy. Plugin-specific form validation and derived-data rebuilding require the plugin’s own API or UI.
 
 User management permits listing and basic profile edits through the API. Account creation/deletion and role, password, email, authentication, or permission changes require a normal administrator session. Temporary browser sessions cannot use account-editing screens. User-meta credential/permission protections remain enforced. Cron runs existing callbacks synchronously and preserves recurrence; callback effects are not rolled back on failure.
 
-Access follows the issuing administrator’s permissions. No direct file writes, shell, or SQL console. Native installs and updates remain available. Expiration stops future requests; it does not undo changes. Build new websites locally.
-
-Requires WordPress 6.9+, PHP 7.4+, HTTPS, and administrator application passwords. New verified trials last three days.
-
-Guest Key installs the optional official MCP Adapter plugin from WordPress.org’s canonical [release ZIP](https://downloads.wordpress.org/plugin/mcp-adapter.zip) using the native WordPress installer. If automatic installation is blocked, install and activate MCP Adapter from Plugins → Add New, then retry. Native REST commands and temporary browser sign-in remain available without MCP.
-
-[Download ZIP](https://github.com/jonschr/guest-key/releases/latest/download/guest-key.zip)
+</details>

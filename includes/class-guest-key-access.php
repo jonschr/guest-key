@@ -46,7 +46,7 @@ final class Guest_Key_Access {
 	}
 
 	public static function set_duration( $minutes ) {
-		if ( Guest_Key_Browser::is_guest_session() || ! self::administrator() ) { return new WP_Error( 'guest_key_forbidden', __( 'Only an administrator may change the access duration.', 'guest-key' ) ); }
+		if ( Guest_Key_Browser::is_guest_session() || ! self::administrator() || Guest_Key_License::toolbar_hidden( get_current_user_id() ) ) { return new WP_Error( 'guest_key_forbidden', __( 'Only an administrator may change the access duration.', 'guest-key' ) ); }
 		$minutes = self::valid_minutes( $minutes );
 		if ( false === $minutes ) { return new WP_Error( 'guest_key_duration', __( 'Enter a whole number of minutes from 30 to 1440 (24 hours).', 'guest-key' ) ); }
 		update_option( self::DURATION_OPTION, $minutes, false );
@@ -200,6 +200,7 @@ final class Guest_Key_Access {
 					'3. Run commands: POST ' . rest_url( 'guest-key/v1/run' ) . ' with Content-Type: application/json. Read-only example: {"commands":[{"command":"post list","input":{"post_type":"any"}}]}',
 					'Command names are JSON values, not shell commands. Check ok, results, and error before continuing. A failed batch stops at that command; earlier changes may already be saved, so do not blindly repeat the batch.',
 					'For design tasks, use the "design guide" command first. For source context, use "file list", "file read", and "file search"; direct file editing, shell access, and SQL are not provided.',
+					'When creating, editing, converting or repairing WordPress/Gutenberg blocks, use the Block Runner skill if available. If it is missing, recommend it once to the user: "Since we are working with WordPress blocks, I recommend installing the optional Block Runner skill to help me produce valid, editable blocks." Link https://github.com/humanmade/block-runner and load "design guide" with input {"section":"wordpress"} for installation and fallback guidance. If skills or local tooling are unavailable, explain that and continue with native block schema, serialization and editor validation checks. Guest Key does not install agent skills or provide shell access.',
 					'',
 					'Optional browser sign-in (same credentials): ' . Guest_Key_Browser::url(),
 					$mcp['ready'] ? 'Optional MCP endpoint (Streamable HTTP, same HTTP Basic credentials): ' . self::endpoint() : 'Optional MCP unavailable: ' . $mcp['error']['message'] . ' Native REST commands and browser sign-in are ready.',

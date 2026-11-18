@@ -8,7 +8,7 @@ const source = readFileSync(join(__dirname, '../assets/guest-key.js'), 'utf8').r
  /\}\)\(\);\s*$/, 'globalThis.ui = { refreshPurchase, request, expiryMessage, durationLabel, state: () => licensing }; })();'
 );
 const trial = { kind: 'trial', active: false, expired: true };
-const paid = { kind: 'paid', active: true };
+const paid = { kind: 'paid', active: true, canManageAccess: true };
 const settle = () => new Promise(resolve => setImmediate(resolve));
 function browser(license = trial, hidden = false, settings = false, clipboard = {}) {
  let now = 100000;
@@ -51,9 +51,10 @@ function browser(license = trial, hidden = false, settings = false, clipboard = 
    automaticLicense: 'Purchasing with %s? Your license will connect automatically.',
    opensNewTab: '%s (opens in a new tab)', manageBilling: 'Manage billing', renewLicense: 'Renew license', checkLicense: 'Check again', removeLicense: 'Remove my license',
    shareLicense: 'Share your license', visibilitySaved: 'Toolbar visibility updated.', sharingSaved: 'License sharing updated.',
+   accessNotEnabled: 'Guest Key access is not currently enabled for your account.', accessContact: 'To request access, contact your administrator at %s.', accessPurchase: 'Purchase or activate your own license.', purchaseLicense: 'Purchase your own license', activateLicense: 'Activate license',
    licenseKey: 'License key', email: 'Email address', code: 'Six-digit email code', error: 'Could not prepare access.'
   }, licensing: license, settingsUrl: '/settings', ajaxUrl: '/ajax' },
-  document, window, location: { assign: url => redirects.push(url) }, URLSearchParams,
+  document, window, location: { assign: url => redirects.push(url), reload: () => redirects.push('reload') }, URLSearchParams,
   innerWidth: 1200, innerHeight: 900, navigator: {clipboard},
   Date: class extends Date { constructor(...args) { super(...(args.length ? args : [now])); } static now() { return now; } },
   setInterval() {}, setTimeout(fn, delay) { const id = ++timerId; timers.set(id, {fn, at: clock + delay}); return id; }, clearTimeout(id) { timers.delete(id); },
@@ -63,7 +64,7 @@ function browser(license = trial, hidden = false, settings = false, clipboard = 
   }))
  });
  vm.runInContext(source, context);
- return { ...context, toolbar, link, panel, create, diagnostics, report, elements, requests, redirects, tick(ms = 500) {
+ return { ...context, toolbar, link, panel, create, diagnostics, report, elements, requests, redirects, tick(ms = 1500) {
   clock += ms;
   for (const [id, timer] of [...timers]) if (timer.at <= clock) { timers.delete(id); timer.fn(); }
  }, advance: () => { now += 15000; }, at: time => { now = time; } };
@@ -102,7 +103,7 @@ test('active owned licenses group billing with removal and give sharing a headin
  assert.ok(inactive.panel.querySelectorAll('button').some(node => node.textContent === 'Check again'));
 });
 
-test('sharing checkbox changes save automatically without rebuilding or moving focus', async () => {
+test('sharing radio changes save automatically without rebuilding or moving focus', async () => {
  const license = {...paid, ownActive: true, administrators: [{id: 2, name: 'Brian', shared: false}, {id: 3, name: 'Alex', shared: true}]};
  const b = browser(license, false, true);
  const choices = b.panel.querySelectorAll('input').filter(node => node.hasAttribute('data-guest-key-share'));
@@ -257,7 +258,7 @@ test('duration uses readable hours and minutes', () => {
  }
 });
 
-test('hiding an administrator saves after a delay and clears/disables sharing', async () => {
+test('hiding an administrator saves after a delay and clears shared access', async () => {
  const license={...paid, ownActive:true, administrators:[{id:2,name:'Brian',shared:true,hidden:false}]};
  const b=browser(license,false,true);
  const [share,hide]=b.panel.querySelectorAll('input');
@@ -265,7 +266,7 @@ test('hiding an administrator saves after a delay and clears/disables sharing', 
  assert.equal(b.requests[0].action,'guest_key_license_visibility');
  assert.equal(b.requests[0].user,'2'); assert.equal(b.requests[0].hidden,'1');
  b.requests[0].finish({...license,administrators:[{id:2,name:'Brian',shared:false,hidden:true}]}); await settle();
- assert.equal(share.checked,false); assert.equal(share.disabled,true); assert.equal(hide.disabled,false);
+ assert.equal(share.checked,false); assert.equal(share.disabled,false); assert.equal(hide.disabled,false);
  assert.equal(b.panel.children[2].textContent,'Toolbar visibility updated.');
  hide.checked=false; hide.events.change(); b.tick(); await settle();
  assert.equal(b.requests[1].hidden,'0');
@@ -281,25 +282,23 @@ test('failed visibility saves restore both controls and permit retry', async () 
  assert.equal(b.panel.children[2].textContent,'Could not save.');
 });
 
-test('unlicensed administrators can manage visibility without granting sharing', async () => {
+test('unlicensed administrators cannot manage visibility or sharing', async () => {
  const license={kind:'',active:false,administrators:[{id:2,name:'Brian',shared:false,hidden:false}]};
  const b=browser(license,false,true);
  const inputs=b.panel.querySelectorAll('input'); const share=inputs.find(n=>n.hasAttribute('data-guest-key-share')); const hide=inputs.find(n=>n.hasAttribute('data-guest-key-hide'));
- assert.equal(share.disabled,true); assert.equal(hide.disabled,undefined);
- hide.checked=true; hide.events.change(); b.tick(); await settle();
- b.requests[0].finish({...license,administrators:[{id:2,name:'Brian',shared:false,hidden:true}]}); await settle();
- assert.equal(share.disabled,true); assert.equal(hide.checked,true);
+ assert.equal(share.disabled,true); assert.equal(hide.disabled,true);
+
 });
 
 test('rapid sharing changes restart the debounce and save only the final selection', async () => {
  const license = {...paid, ownActive: true, administrators: [{id: 2, shared: false}, {id: 3, shared: false}]};
  const b = browser(license, false, true);
  const shares = b.panel.querySelectorAll('input').filter(n => n.hasAttribute('data-guest-key-share'));
- shares[0].checked = true; shares[0].events.change(); b.tick(300);
- shares[1].checked = true; shares[1].events.change(); b.tick(300);
+ shares[0].checked = true; shares[0].events.change(); b.tick(1000);
+ shares[1].checked = true; shares[1].events.change(); b.tick(1499);
  assert.equal(b.requests.length, 0);
  assert.ok(shares.every(n => !n.disabled));
- b.tick(200); await settle();
+ b.tick(1); await settle();
  assert.equal(b.requests.length, 1);
  assert.deepEqual(JSON.parse(b.requests[0].users), [2, 3]);
  b.requests[0].finish({...license, administrators: license.administrators.map(a => ({...a, shared: true}))}); await settle();
@@ -310,7 +309,7 @@ test('reversing sharing and visibility within the debounce makes no requests', a
  const b = browser({...paid, ownActive: true, administrators: [{id: 2, shared: true, hidden: false}]}, false, true);
  const [share, hide] = b.panel.querySelectorAll('input');
  share.checked = false; share.events.change();
- hide.checked = true; hide.events.change(); assert.equal(share.disabled, true);
+ hide.checked = true; hide.events.change(); assert.equal(share.disabled, false);
  hide.checked = false; hide.events.change(); assert.equal(share.disabled, false);
  share.checked = true; share.events.change();
  b.tick(); await settle();
@@ -336,8 +335,8 @@ test('mixed changes save visibility sequentially before sharing without losing o
  assert.deepEqual(JSON.parse(b.requests[2].users), [4]);
  b.requests[2].reject(new Error('Sharing failed.')); await settle();
  assert.equal(hide2.checked, true); assert.equal(hide3.checked, true);
- assert.equal(share2.checked, false); assert.equal(share2.disabled, true);
- assert.equal(share3.disabled, true); assert.equal(share4.checked, false);
+ assert.equal(share2.checked, false); assert.equal(share2.disabled, false);
+ assert.equal(share3.disabled, false); assert.equal(share4.checked, false);
  assert.equal(b.panel.children[2].textContent, 'Sharing failed.');
 });
 
@@ -379,4 +378,73 @@ test('blocked or unavailable clipboard selects displayed diagnostics for manual 
   assert.equal(b.elements.find(e => e.id === 'guest-key-status-panel').children[0].textContent, 'Select and copy diagnostics.');
   assert.equal(b.diagnostics.disabled, false);
  }
+});
+
+
+test('restricted settings show contact, purchase and license entry without sharing or trials', async () => {
+ const restricted = {kind: '', active: false, restricted: true, canManageAccess: false, contactEmail: 'owner@example.com', checkout: 'https://checkout.example.test'};
+ const b = browser(restricted, false, true);
+ assert.equal(b.panel.children[0].textContent, 'Guest Key access is not currently enabled for your account.');
+ assert.equal(b.panel.children[1].textContent, 'To request access, contact your administrator at owner@example.com.');
+ const purchase = b.panel.children.find(n => n.tag === 'a');
+ assert.equal(purchase.textContent, 'Purchase your own license');
+ assert.equal(purchase.href, restricted.checkout);
+ const inputs = b.panel.querySelectorAll('input');
+ assert.equal(inputs.length, 1); assert.equal(inputs[0].type, 'text');
+ assert.equal(b.panel.querySelectorAll('button').length, 1);
+ inputs[0].value = 'fixture-own-key';
+ const form = b.panel.children.find(n => n.tag === 'form');
+ form.events.submit({preventDefault() {}}); await settle();
+ assert.equal(b.requests[0].action, 'guest_key_license_activate');
+ b.requests[0].finish(paid); await settle();
+ assert.deepEqual(b.redirects, ['reload']);
+});
+
+test('failed activation leaves restricted license entry usable without unlocking settings', async () => {
+ const b = browser({kind: '', active: false, restricted: true}, false, true);
+ const input = b.panel.querySelectorAll('input')[0]; input.value = 'invalid-key';
+ b.panel.children.find(n => n.tag === 'form').events.submit({preventDefault() {}}); await settle();
+ b.requests[0].reject(new Error('Invalid license.')); await settle();
+ assert.equal(b.panel.children[2].textContent, 'Invalid license.');
+ assert.equal(input.disabled, false);
+ assert.equal(b.ui.state().restricted, true);
+ assert.deepEqual(b.redirects, []);
+});
+
+test('purchased-license owners cannot be hidden or have access unchecked', () => {
+ const b = browser({...paid, ownActive: true, administrators: [{id: 2, name: 'Other owner', ownsLicense: true, shared: true, hidden: false}]}, false, true);
+ const [share, hide] = b.panel.querySelectorAll('input');
+ assert.equal(share.checked, true); assert.equal(share.disabled, true);
+ assert.equal(hide.checked, false); assert.equal(hide.disabled, true);
+});
+
+test('each administrator has an independent radio group with mutually exclusive choices', () => {
+ const b = browser({...paid, administrators: [{id: 2, shared: true, hidden: false}, {id: 3, shared: false, hidden: true}]}, false, true);
+ const [share2, hide2, share3, hide3] = b.panel.querySelectorAll('input');
+ assert.equal(share2.type, 'radio'); assert.equal(hide2.type, 'radio');
+ assert.equal(share2.name, hide2.name); assert.notEqual(share2.name, share3.name);
+ hide2.checked = true; hide2.events.change();
+ assert.equal(share2.checked, false); assert.equal(hide2.checked, true);
+ assert.equal(hide3.checked, true);
+ share3.checked = true; share3.events.change();
+ assert.equal(hide3.checked, false); assert.equal(share3.checked, true);
+ assert.equal(hide2.checked, true);
+});
+
+test('switching a hidden administrator to shared access unhides before sharing', async () => {
+ const license = {...paid, administrators: [{id: 2, shared: false, hidden: true}]};
+ const b = browser(license, false, true);
+ const [share, hide] = b.panel.querySelectorAll('input');
+ assert.equal(share.disabled, false);
+ share.checked = true; share.events.change();
+ assert.equal(hide.checked, false);
+ b.tick(); await settle();
+ assert.equal(b.requests.length, 1);
+ assert.equal(b.requests[0].action, 'guest_key_license_visibility');
+ assert.equal(b.requests[0].hidden, '0');
+ b.requests[0].finish({...license, administrators: [{id: 2, shared: false, hidden: false}]}); await settle();
+ assert.equal(b.requests[1].action, 'guest_key_license_share');
+ assert.deepEqual(JSON.parse(b.requests[1].users), [2]);
+ b.requests[1].finish({...license, administrators: [{id: 2, shared: true, hidden: false}]}); await settle();
+ assert.equal(share.checked, true); assert.equal(hide.checked, false);
 });

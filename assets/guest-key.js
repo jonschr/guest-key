@@ -144,6 +144,20 @@
 			const submitRow = document.createElement('p'); submitRow.append(button); form.append(fieldRow, submitRow);
 			form.addEventListener('submit', event => { event.preventDefault(); run(() => callback(input.value)); }); parent.append(form); return input;
 		}
+		if (licensing.restricted) {
+			heading.textContent = s.accessNotEnabled;
+			intro.textContent = licensing.contactEmail ? s.accessContact.replace('%s', licensing.contactEmail) : s.accessContactFallback;
+			const explanation = document.createElement('p'); explanation.textContent = s.accessPurchase;
+			const purchase = document.createElement('a'); purchase.textContent = s.purchaseLicense;
+			purchase.href = licensing.checkout; purchase.className = 'button';
+			licensePanel.append(explanation, purchase);
+			const input = form(s.licenseKey, 'text', s.activateLicense, async key => {
+				await request('guest_key_license_activate', {key});
+				location.reload();
+			});
+			if (takeFocus) input.focus();
+			return;
+		}
 		const keyColumn = document.createElement('div');
 		const emailColumn = document.createElement('div');
 		const showTrial = !licensing?.active && licensing?.kind !== 'paid' && !licensing?.expired;
@@ -167,7 +181,7 @@
 		if (licensing?.kind === 'paid') {
 			licensePanel.append(licenseActions);
 			if (!licensing.ownActive) action(s.checkLicense, async () => { await request('guest_key_license_status'); licenseNotice(); }, licenseActions);
-			action(s.removeLicense, async () => { await request('guest_key_license_remove'); licenseNotice(); }, licenseActions);
+			action(s.removeLicense, async () => { await request('guest_key_license_remove'); if (licensing.restricted) location.reload(); else licenseNotice(); }, licenseActions);
 		} else {
 			const input = form(s.licenseKey, 'text', s.activateLicense, async key => { await request('guest_key_license_activate', {key}); licenseNotice(s.licenseActive); }, keyColumn);
 			focus ||= input;
@@ -183,8 +197,11 @@
 				choices.forEach(({share, hide, id}) => {
 					const admin = licensing.administrators.find(admin => admin.id === id);
 					share.checked = !!admin?.shared; hide.checked = !!admin?.hidden;
-					if (licensing.kind !== 'paid' || admin?.hidden) share.setAttribute('data-guest-key-disabled', '');
+					if (!licensing.canManageAccess || admin?.ownsLicense) share.setAttribute('data-guest-key-disabled', '');
 					else share.removeAttribute('data-guest-key-disabled');
+					if (!licensing.canManageAccess || admin?.ownsLicense) hide.setAttribute('data-guest-key-disabled', '');
+					else hide.removeAttribute('data-guest-key-disabled');
+					hide.disabled = hide.hasAttribute('data-guest-key-disabled');
 					share.disabled = share.hasAttribute('data-guest-key-disabled');
 				});
 			}
@@ -214,26 +231,21 @@
 				saveTimer = setTimeout(() => {
 					if (busy) { scheduleSave(); return; }
 					run(async () => {});
-				}, 500);
+				}, 1500);
 			}
 			licensing.administrators.forEach(admin => {
 				const row = document.createElement('div'); row.className = 'guest-key-admin-row';
-				row.setAttribute('role', 'group'); row.setAttribute('aria-label', admin.name);
+				row.setAttribute('role', 'radiogroup'); row.setAttribute('aria-label', admin.name);
 				const name = document.createElement('strong'); name.textContent = admin.name; row.append(name);
 				function choice(label, attribute) {
 					const field = document.createElement('label');
-					const input = document.createElement('input'); input.type = 'checkbox'; input.value = admin.id; input.setAttribute(attribute, '');
+					const input = document.createElement('input'); input.type = 'radio'; input.name = `guest-key-access-${admin.id}`; input.value = admin.id; input.setAttribute(attribute, '');
 					field.append(input, ' ', label); row.append(field); return input;
 				}
 				const share = choice(s.shareAccess, 'data-guest-key-share');
 				const hide = choice(s.hideToolbar, 'data-guest-key-hide');
-				share.addEventListener('change', scheduleSave);
-				hide.addEventListener('change', () => {
-					if (licensing.kind !== 'paid' || hide.checked) share.setAttribute('data-guest-key-disabled', '');
-					else share.removeAttribute('data-guest-key-disabled');
-					share.disabled = share.hasAttribute('data-guest-key-disabled');
-					scheduleSave();
-				});
+				share.addEventListener('change', () => { hide.checked = false; scheduleSave(); });
+				hide.addEventListener('change', () => { share.checked = false; scheduleSave(); });
 				choices.push({share, hide, id: admin.id}); sharing.append(row);
 			});
 			syncChoices(); licensePanel.append(sharing);
@@ -449,7 +461,7 @@
 	if (licenseSettings) licenseNotice('', false, false);
 	function refreshPurchase() {
 		if (purchaseCheck) return purchaseCheck;
-		if (busy || licensing?.kind !== 'trial' || document.hidden || Date.now() - purchaseCheckedAt < 15000) return;
+		if (busy || licensing?.restricted || licensing?.kind !== 'trial' || document.hidden || Date.now() - purchaseCheckedAt < 15000) return;
 		purchaseCheckedAt = Date.now();
 		purchaseCheck = (async () => {
 			try {

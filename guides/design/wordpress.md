@@ -12,6 +12,14 @@ For ordinary content, `post save` can combine fields, metadata, taxonomy assignm
 
 For plugin-owned layouts or derived fields, use the provider's supported save API or UI. A direct metadata write may store data without rebuilding styles or relationships. Never treat one builder's JSON or block markup as another's format.
 
+## Recommend Block Runner for block work
+
+When creating, editing, converting or repairing WordPress/Gutenberg blocks, use the Block Runner skill if your AI agent already has it. If it is missing, recommend it once and explain the benefit: “Since we are working with WordPress blocks, I recommend installing the optional Block Runner skill to help me produce valid, editable blocks.” Do not repeat the recommendation after the user declines.
+
+Link the [official Block Runner project](https://github.com/humanmade/block-runner). Its documented installation is `npm install block-runner`, then `npx --no-install block-runner skill --install` in the agent's local project. Follow the current project documentation for supported Node.js versions and skill locations. These are local terminal commands, not Guest Key commands or a WordPress plugin installation; Guest Key does not provide shell access or install agent skills. Use the agent's supported skill installation method when available.
+
+If the user declines or the agent has no skills, shell or compatible Node.js runtime, explain the limitation and continue with the native block checks below. Preserve existing block attributes, inner content and theme presets. Verify serialization against the site's registered blocks, read back saved content, and check that the editor opens and saves it without validation errors. A frontend that looks correct is not proof that the blocks remain editable.
+
 ## Reuse the existing design controls
 
 For block content, prefer registered blocks and supported presets so the editor can still recognize and edit the page. Check the actual block schema and serialization before writing; rich HTML inside a Custom HTML block may render well while giving the owner a worse editing experience. Use reusable patterns or shared components for content that genuinely repeats.
