@@ -67,7 +67,7 @@ final class Guest_Key_Commands {
 			'media upload' => 'upload-media', 'post save' => 'save-post', 'rest request' => 'request', 'design guide' => 'design-guide',
 			'file list' => 'list-files', 'file read' => 'read-file', 'file search' => 'search-files',
 		) as $command => $ability ) { $commands[ $command ] = array( 'ability' => 'guest-key/' . $ability ); }
-		foreach ( array( 'post' => 'manage-posts', 'post meta' => 'manage-post-meta', 'term' => 'manage-terms', 'option' => 'manage-options', 'theme mod' => 'manage-theme-mods', 'user meta' => 'manage-user-meta', 'term meta' => 'manage-term-meta', 'cron' => 'manage-cron' ) as $prefix => $name ) {
+		foreach ( array( 'post' => 'manage-posts', 'post meta' => 'manage-post-meta', 'post acf' => 'manage-acf-fields', 'term' => 'manage-terms', 'option' => 'manage-options', 'theme mod' => 'manage-theme-mods', 'user meta' => 'manage-user-meta', 'term meta' => 'manage-term-meta', 'cron' => 'manage-cron' ) as $prefix => $name ) {
 			$ability = wp_get_ability( 'guest-key/' . $name );
 			foreach ( $ability->get_input_schema()['properties']['action']['enum'] as $action ) {
 				$commands[ $prefix . ' ' . $action ] = array( 'ability' => $ability->get_name(), 'action' => $action );

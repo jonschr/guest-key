@@ -16,6 +16,13 @@ final class Guest_Key_Content_Abilities {
 
 	private static function denied( $stage = null, $details = array() ) {
 		$messages = array( 'post_access' => 'Your account cannot edit this post.', 'metadata_authorization' => 'A WordPress metadata authorization rule denied this field operation.', 'capability' => 'WordPress capability checks denied this field operation.', 'readonly' => 'This metadata field is declared readonly.' );
+		if ( 'capability' === $stage ) {
+			$messages['capability'] .= ' auth_allowed reports an earlier metadata authorization stage, not final capability approval.';
+			if ( function_exists( 'acf_map_post_meta_caps' ) && in_array( 'do_not_allow', acf_map_post_meta_caps( array(), $details['capability'], $details['user_id'], array( $details['post_id'], $details['key'] ) ), true ) ) {
+				$messages['capability'] .= ' ACF protects this field from generic metadata writes. Use post acf list and post acf update with a stable field_key; unsupported fields require the WordPress editor.';
+				$details['required_pathway'] = 'post acf update';
+			}
+		}
 		return new WP_Error( 'guest_key_content_denied', $messages[ $stage ] ?? 'Your account cannot perform this operation on this content or field.', $stage ? array_merge( $details, array( 'stage' => $stage ) ) : null );
 	}
 

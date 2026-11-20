@@ -1,5 +1,10 @@
 # Changes
 
+## 0.3.2 — 2026-11-20
+
+- Add `post acf list/get/validate/update` and the `guest-key/manage-acf-fields` ability for applicable top-level ACF text fields using ACF form restrictions, preparation, validation and save hooks. Require ACF 6.8.11+, preserve public REST settings and reject unsupported fields.
+- Explain ACF-owned generic metadata denials and clarify that earlier metadata authorization does not imply final capability approval.
+
 ## 0.3.1 — 2026-11-18
 
 - Show Change owner first, then reveal the administrator dropdown with Confirm change and Cancel actions.

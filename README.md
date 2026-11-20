@@ -46,6 +46,7 @@ If the controlling administrator is deleted or loses their administrator role on
 | --- | --- |
 | `post` | Discover types; search across types; create, edit, trash, and restore content |
 | `post save` | Save content, custom fields, taxonomy terms, and a featured image together |
+| `post acf` | Discover, read, validate and save supported ACF text fields through ACF’s form workflow |
 | `post meta` | Read and edit custom fields, including underscore keys; honor declared field rules |
 | `term` | Discover taxonomies and manage terms and assignments |
 | `media upload` | Upload media with captions and alt text |
